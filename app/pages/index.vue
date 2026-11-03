@@ -1,8 +1,12 @@
+<script setup lang="ts">
+const store = useProfileStore()
+</script>
+
 <template>
-  <div class="flex min-h-screen items-center justify-center">
+  <div class="flex h-full items-center justify-center p-8">
     <div class="text-center">
-      <h1 class="text-3xl font-semibold">CompanyChat</h1>
-      <p class="mt-2 text-muted">Scaffold is running. Auth and chat come next.</p>
+      <h1 class="text-2xl font-semibold">Welcome<span v-if="store.profile">, {{ store.profile.display_name }}</span></h1>
+      <p class="mt-2 text-muted">Clients, projects and messaging arrive in the next stages.</p>
     </div>
   </div>
 </template>

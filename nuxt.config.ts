@@ -14,7 +14,7 @@ export default defineNuxtConfig({
     redirectOptions: {
       login: '/login',
       callback: '/confirm',
-      exclude: ['/'], // TODO(auth branch): remove once /login exists
+      exclude: [],
     },
   },
 })

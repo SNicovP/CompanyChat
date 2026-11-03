@@ -23,3 +23,7 @@ npm run dev
 7. Admin UI
 
 Requires Node ^22.21 || ^24.11 || >=26 (Nuxt 4).
+
+## Auth
+- Invite-only: public signup is disabled (`enable_signup = false`). Invite users from the Supabase dashboard (Authentication > Users > Invite) or create them there.
+- The first user created becomes the `owner`; everyone after is a `member`.
