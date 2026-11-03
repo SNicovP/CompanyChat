@@ -42,7 +42,9 @@ create policy "users update their own profile"
   using (id = auth.uid())
   with check (id = auth.uid());
 
-revoke update on public.profiles from authenticated;
+-- Explicit grants (the project does not auto-expose new tables to the Data API).
+revoke all on public.profiles from anon, authenticated;
+grant select on public.profiles to authenticated;
 grant update (display_name, avatar_url, status) on public.profiles to authenticated;
 
 -- Create a profile on signup/invite. The very first user becomes the owner.
