@@ -237,6 +237,49 @@ export type Database = {
           },
         ]
       }
+      message_mentions: {
+        Row: {
+          channel_id: string
+          created_at: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_mentions_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_mentions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_mentions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           body: string
@@ -324,6 +367,10 @@ export type Database = {
       get_unread_counts: {
         Args: never
         Returns: { chan_id: string; unread: number }[]
+      }
+      get_unread_mention_counts: {
+        Args: never
+        Returns: { chan_id: string; mentions: number }[]
       }
       is_app_admin: { Args: never; Returns: boolean }
       is_channel_member: { Args: { chid: string }; Returns: boolean }

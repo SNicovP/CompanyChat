@@ -25,6 +25,7 @@ export const useChatStore = defineStore('chat', () => {
   const managedChannelIds = ref<string[]>([])
   const onlineIds = ref<string[]>([])
   const unread = ref<Record<string, number>>({})
+  const mentions = ref<Record<string, number>>({})
   const activeChannelId = ref<string | null>(null)
   const loaded = ref(false)
 
@@ -39,6 +40,7 @@ export const useChatStore = defineStore('chat', () => {
     return map
   })
 
+  const totalMentions = computed(() => Object.values(mentions.value).reduce((a, b) => a + b, 0))
   const totalUnread = computed(() => Object.values(unread.value).reduce((a, b) => a + b, 0))
 
   const activePeople = computed(() => Object.values(directory.value).filter((u) => u.is_active))
@@ -110,10 +112,17 @@ export const useChatStore = defineStore('chat', () => {
     const counts = Object.fromEntries(data.map((r) => [r.chan_id, Number(r.unread)]))
     if (activeChannelId.value && viewing()) delete counts[activeChannelId.value]
     unread.value = counts
+
+    const { data: mentionData, error: mentionError } = await supabase.rpc('get_unread_mention_counts')
+    if (mentionError) return
+    const mentionCounts = Object.fromEntries(mentionData.map((r) => [r.chan_id, Number(r.mentions)]))
+    if (activeChannelId.value && viewing()) delete mentionCounts[activeChannelId.value]
+    mentions.value = mentionCounts
   }
 
   async function markRead(channelId: string) {
     if (unread.value[channelId]) unread.value = { ...unread.value, [channelId]: 0 }
+    if (mentions.value[channelId]) mentions.value = { ...mentions.value, [channelId]: 0 }
     await supabase.rpc('mark_channel_read', { chid: channelId })
   }
 
@@ -137,6 +146,7 @@ export const useChatStore = defineStore('chat', () => {
   let presenceChannel: ReturnType<typeof supabase.channel> | null = null
   let profileChannel: ReturnType<typeof supabase.channel> | null = null
   let messageChannel: ReturnType<typeof supabase.channel> | null = null
+  let mentionChannel: ReturnType<typeof supabase.channel> | null = null
   const onFocus = () => { if (activeChannelId.value) markRead(activeChannelId.value) }
 
   /** Idempotent per signed-in user (the auth user object can re-emit on token refresh). */
@@ -175,12 +185,24 @@ export const useChatStore = defineStore('chat', () => {
         onIncomingMessage(payload.new as { channel_id: string; user_id: string | null })
       })
       .subscribe()
+
+    // Only our own mentions are delivered (RLS), so no filter is needed beyond being explicit.
+    mentionChannel = supabase
+      .channel('mentions-me')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_mentions', filter: `user_id=eq.${id}` }, (payload) => {
+        const channelId = (payload.new as { channel_id: string }).channel_id
+        if (channelId === activeChannelId.value && viewing()) return // already being read
+        mentions.value = { ...mentions.value, [channelId]: (mentions.value[channelId] ?? 0) + 1 }
+      })
+      .subscribe()
     window.addEventListener('focus', onFocus)
   }
 
   function stop() {
     if (messageChannel) supabase.removeChannel(messageChannel)
     messageChannel = null
+    if (mentionChannel) supabase.removeChannel(mentionChannel)
+    mentionChannel = null
     if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
     if (presenceChannel) supabase.removeChannel(presenceChannel)
     if (profileChannel) supabase.removeChannel(profileChannel)
@@ -188,6 +210,7 @@ export const useChatStore = defineStore('chat', () => {
     started = null
     onlineIds.value = []
     unread.value = {}
+    mentions.value = {}
   }
 
   async function createClient(name: string) {
@@ -224,5 +247,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, unread, totalUnread, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
 })

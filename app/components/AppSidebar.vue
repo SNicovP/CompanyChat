@@ -79,7 +79,10 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
         >
           <UIcon v-if="p.is_private" name="i-lucide-lock" class="size-3" />
           {{ p.name }}
-          <UBadge v-if="chat.unread[p.id]" size="sm" class="ml-auto">{{ chat.unread[p.id] }}</UBadge>
+          <span class="ml-auto flex gap-1">
+            <UBadge v-if="chat.mentions[p.id]" size="sm" color="error" :title="`${chat.mentions[p.id]} mention(s) of you`">@{{ chat.mentions[p.id] }}</UBadge>
+            <UBadge v-if="chat.unread[p.id]" size="sm">{{ chat.unread[p.id] }}</UBadge>
+          </span>
         </NuxtLink>
       </div>
     </section>
@@ -98,7 +101,10 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
       >
         <StatusDot :status="chat.displayStatus(chat.otherUser(dm)?.id)" size="sm" />
         {{ chat.channelTitle(dm) }}
-        <UBadge v-if="chat.unread[dm.id]" size="sm" class="ml-auto">{{ chat.unread[dm.id] }}</UBadge>
+        <span class="ml-auto flex gap-1">
+          <UBadge v-if="chat.mentions[dm.id]" size="sm" color="error">@{{ chat.mentions[dm.id] }}</UBadge>
+          <UBadge v-if="chat.unread[dm.id]" size="sm">{{ chat.unread[dm.id] }}</UBadge>
+        </span>
       </NuxtLink>
     </section>
 

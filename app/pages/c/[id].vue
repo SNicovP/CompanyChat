@@ -29,6 +29,15 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
 const editingId = ref<string | null>(null)
 const editDraft = ref('')
+const editMap = ref<Record<string, string>>({}) // name -> user id for mentions already in the edited message
+
+// @mention picker in the composer
+const mentionMap = ref<Record<string, string>>({}) // name -> user id for mentions picked in this draft
+const picker = reactive({ open: false, start: 0, query: '', index: 0 })
+let composerEl: HTMLTextAreaElement | null = null
+const candidates = computed(() =>
+  picker.open ? filterPeople(chat.activePeople.filter((u) => u.id !== chat.myId), picker.query) : [],
+)
 
 function sortMessages() {
   messages.value.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
@@ -183,7 +192,7 @@ async function uploadAttachments(messageId: string, picked: File[]): Promise<Att
 }
 
 async function send() {
-  const body = draft.value.trim()
+  const body = displayToTokens(draft.value.trim(), mentionMap.value)
   const picked = [...files.value]
   if ((!body && !picked.length) || sending.value) return
   sending.value = true
@@ -213,6 +222,8 @@ async function send() {
 
   sending.value = false
   draft.value = ''
+  mentionMap.value = {}
+  closePicker()
   files.value = []
   const existing = messages.value.find((x) => x.id === data.id)
   if (existing) existing.message_attachments = attachments // realtime got there first
@@ -224,8 +235,10 @@ async function send() {
 }
 
 function startEdit(m: Message) {
+  const { text, map } = tokensToDisplay(m.body, (id) => chat.userName(id))
   editingId.value = m.id
-  editDraft.value = m.body
+  editDraft.value = text
+  editMap.value = map
 }
 
 function cancelEdit() {
@@ -234,7 +247,7 @@ function cancelEdit() {
 }
 
 async function saveEdit(m: Message) {
-  const check = checkEdit(editDraft.value, m.body, (m.message_attachments ?? []).some((a) => !a.deleted_at))
+  const check = checkEdit(displayToTokens(editDraft.value, editMap.value), m.body, (m.message_attachments ?? []).some((a) => !a.deleted_at))
   if (check.action === 'cancel') return cancelEdit()
   if (check.action === 'reject') {
     toast.add({ title: 'Message not changed', description: check.reason, color: 'warning' })
@@ -273,6 +286,50 @@ function onArrowUp(e: KeyboardEvent) {
   e.preventDefault()
   startEdit(mine)
 }
+
+function closePicker() {
+  picker.open = false
+  picker.index = 0
+}
+
+/** Re-evaluate whether the caret is inside an @query; call on input, click and caret movement. */
+function updatePicker(e: Event) {
+  const el = e.target as HTMLTextAreaElement
+  composerEl = el
+  const found = findMentionQuery(el.value, el.selectionStart ?? 0)
+  if (!found) return closePicker()
+  if (!picker.open || found.query !== picker.query) picker.index = 0
+  picker.open = true
+  picker.start = found.start
+  picker.query = found.query
+}
+
+function pick(person: { id: string; display_name: string }) {
+  const el = composerEl
+  if (!el) return
+  const r = applyMention(draft.value, picker.start, el.selectionStart ?? draft.value.length, person.display_name)
+  draft.value = r.text
+  mentionMap.value[person.display_name] = person.id
+  closePicker()
+  nextTick(() => {
+    el.focus()
+    el.setSelectionRange(r.caret, r.caret)
+  })
+}
+
+function onComposerKeydown(e: KeyboardEvent) {
+  if (picker.open && candidates.value.length) {
+    const n = candidates.value.length
+    if (e.key === 'ArrowDown') { e.preventDefault(); picker.index = (picker.index + 1) % n; return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); picker.index = (picker.index - 1 + n) % n; return }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(candidates.value[picker.index]!); return }
+    if (e.key === 'Escape') { e.preventDefault(); closePicker(); return }
+  }
+  if (e.key === 'Enter') onEnter(e)
+  else if (e.key === 'ArrowUp') onArrowUp(e)
+}
+
+const mentionsMe = (m: Message) => !!chat.myId && m.body.toLowerCase().includes(`@[${chat.myId.toLowerCase()}]`)
 
 function onEnter(e: KeyboardEvent) {
   if (e.shiftKey) return // newline
@@ -335,7 +392,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
       <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
         <p v-if="loading" class="text-muted">Loading…</p>
         <p v-else-if="!messages.length" class="text-muted">No messages yet. Say hello!</p>
-        <div v-for="m in messages" :key="m.id" class="group">
+        <div v-for="m in messages" :key="m.id" class="group" :class="{ 'border-l-2 border-primary pl-2': mentionsMe(m) }">
           <div class="flex items-baseline gap-2">
             <StatusDot :status="chat.displayStatus(m.user_id)" size="sm" class="self-center" />
             <span class="font-semibold">{{ chat.userName(m.user_id) }}</span>
@@ -378,7 +435,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               Enter to save, Esc to cancel
             </div>
           </div>
-          <p v-else-if="m.body" class="whitespace-pre-wrap break-words">{{ m.body }}</p>
+          <MessageBody v-else-if="m.body" :body="m.body" />
           <MessageAttachments
             v-if="m.message_attachments?.length"
             :attachments="m.message_attachments"
@@ -404,7 +461,25 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             </button>
           </UBadge>
         </div>
-        <div class="flex items-end gap-2">
+        <div class="relative flex items-end gap-2">
+          <ul
+            v-if="candidates.length"
+            class="absolute bottom-full left-12 z-10 mb-1 w-64 overflow-hidden rounded-md border border-default bg-default shadow-lg"
+            role="listbox"
+          >
+            <li
+              v-for="(p, i) in candidates"
+              :key="p.id"
+              role="option"
+              :aria-selected="i === picker.index"
+              class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm"
+              :class="{ 'bg-elevated': i === picker.index }"
+              @mousedown.prevent="pick(p)"
+            >
+              <StatusDot :status="chat.displayStatus(p.id)" size="sm" />
+              {{ p.display_name }}
+            </li>
+          </ul>
           <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
           <UButton icon="i-lucide-paperclip" color="neutral" variant="ghost" aria-label="Attach files" @click="fileInput?.click()" />
           <UTextarea
@@ -413,11 +488,15 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             autoresize
             :maxrows="8"
             maxlength="4000"
-            placeholder="Message (Enter to send, Shift+Enter for a new line, paste or drop files)"
+            placeholder="Message (Enter to send, @ to mention, paste or drop files)"
             class="flex-1"
             :disabled="sending"
-            @keydown.enter="onEnter"
-            @keydown.up="onArrowUp"
+            @keydown="onComposerKeydown"
+            @input="updatePicker"
+            @click="updatePicker"
+            @keyup.left="updatePicker"
+            @keyup.right="updatePicker"
+            @blur="closePicker"
             @paste="onPaste"
           />
         </div>

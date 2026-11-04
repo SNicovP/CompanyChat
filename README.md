@@ -85,3 +85,9 @@ In the Supabase dashboard (Authentication > URL Configuration) add `<SITE_URL>/*
 
 ## Editing messages
 Hover your own message and click the pencil, or press Up in an empty composer to edit your latest message. Enter saves, Esc cancels; edited messages show "(edited)". Authors can change only the text (not the author, channel or time), and only while they can still access the channel. No new migration: the rules and the `edited_at` stamp were already in the messages table.
+
+## Mentions
+- Type `@` in the composer for a people picker (Up/Down, Enter or Tab to choose, Esc to close). In the stored message a mention is `@[<user uuid>]`, shown as the person's current name, so renames never break it.
+- The database derives `message_mentions` from the body with a trigger: only active people who can see the channel are recorded, never the author, at most 20 per message. Editing a message updates its mentions.
+- Mentioned people get a red `@N` badge in the sidebar, `(@N)` in the tab title, and the message is highlighted with their name emphasised.
+- Limits: new mentions can't be added while editing an old message yet (existing ones are kept), and there is no `@channel`/`@everyone`.

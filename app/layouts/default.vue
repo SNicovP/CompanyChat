@@ -7,7 +7,12 @@ const chat = useChatStore()
 const user = useSupabaseUser()
 const toast = useToast()
 
-useHead({ title: computed(() => (chat.totalUnread ? `(${chat.totalUnread}) CompanyChat` : 'CompanyChat')) })
+useHead({
+  title: computed(() => {
+    if (chat.totalMentions) return `(@${chat.totalMentions}) CompanyChat`
+    return chat.totalUnread ? `(${chat.totalUnread}) CompanyChat` : 'CompanyChat'
+  }),
+})
 
 watch(
   user,
