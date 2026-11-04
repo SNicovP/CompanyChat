@@ -50,7 +50,7 @@ async function openDm(userId: string) {
   }
 }
 
-const people = computed(() => Object.values(chat.directory).filter((u) => u.id !== chat.myId))
+const people = computed(() => chat.activePeople.filter((u) => u.id !== chat.myId))
 
 // Admins add clients; admins and that client's managers add projects; RLS is the real gate, this just hides the button.
 const canCreateClient = computed(() => profile.isAdmin)

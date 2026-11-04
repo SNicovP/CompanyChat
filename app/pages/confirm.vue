@@ -3,8 +3,14 @@ definePageMeta({ layout: 'blank' })
 
 // Landing page for invite / magic-link redirects. The Supabase module
 // processes the token; once a session exists, move on.
+// Invites arrive with ?next=set-password so new people choose a password first.
 const user = useSupabaseUser()
-watch(user, (u) => { if (u) navigateTo('/') }, { immediate: true })
+const route = useRoute()
+watch(
+  user,
+  (u) => { if (u) navigateTo(route.query.next === 'set-password' ? '/set-password' : '/') },
+  { immediate: true },
+)
 </script>
 
 <template>

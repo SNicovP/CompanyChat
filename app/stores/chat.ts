@@ -4,7 +4,7 @@ import { effectiveStatus, type DisplayStatus } from '~/utils/status'
 
 type Tables = Database['public']['Tables']
 export type Client = Pick<Tables['clients']['Row'], 'id' | 'name'>
-export type DirectoryUser = Pick<Tables['profiles']['Row'], 'id' | 'display_name' | 'status' | 'app_role'>
+export type DirectoryUser = Pick<Tables['profiles']['Row'], 'id' | 'display_name' | 'status' | 'app_role' | 'is_active'>
 export interface Channel {
   id: string
   kind: 'project' | 'dm'
@@ -41,6 +41,8 @@ export const useChatStore = defineStore('chat', () => {
 
   const totalUnread = computed(() => Object.values(unread.value).reduce((a, b) => a + b, 0))
 
+  const activePeople = computed(() => Object.values(directory.value).filter((u) => u.is_active))
+
   const dms = computed(() => channels.value.filter((c) => c.kind === 'dm'))
 
   function otherUser(channel: Channel): DirectoryUser | undefined {
@@ -69,7 +71,7 @@ export const useChatStore = defineStore('chat', () => {
     const [c, ch, p, mine, mineCh] = await Promise.all([
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('channels').select('id, kind, client_id, name, is_private, channel_members(user_id)'),
-      supabase.from('profiles').select('id, display_name, status, app_role').order('display_name'),
+      supabase.from('profiles').select('id, display_name, status, app_role, is_active').order('display_name'),
       supabase.from('client_members').select('client_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
       supabase.from('channel_members').select('channel_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
     ])
@@ -160,7 +162,7 @@ export const useChatStore = defineStore('chat', () => {
         if (row?.id && row.display_name !== undefined) {
           directory.value = {
             ...directory.value,
-            [row.id]: { id: row.id, display_name: row.display_name, status: row.status!, app_role: row.app_role! },
+            [row.id]: { id: row.id, display_name: row.display_name, status: row.status!, app_role: row.app_role!, is_active: row.is_active ?? true },
           }
         }
       })
@@ -222,5 +224,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, displayStatus, start, stop, unread, totalUnread, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, unread, totalUnread, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
 })

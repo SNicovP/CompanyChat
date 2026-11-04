@@ -13,7 +13,14 @@ watch(
   user,
   (u) => {
     if (!u) return
-    store.load().catch(() => {})
+    store.load().catch(async (e) => {
+      // No profile row visible (PGRST116) means the account was deactivated: end the session.
+      if (e?.code === 'PGRST116') {
+        await supabase.auth.signOut()
+        chat.reset()
+        await navigateTo('/login')
+      }
+    })
     chat.start()
     chat.load().catch((e) => toast.add({ title: 'Could not load chats', description: String(e?.message ?? e), color: 'error' }))
   },

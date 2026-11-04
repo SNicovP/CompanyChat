@@ -21,7 +21,7 @@ const sorted = computed(() =>
 
 const candidates = computed(() => {
   const inside = new Set(members.value.map((m) => m.user_id))
-  return Object.values(chat.directory)
+  return chat.activePeople
     .filter((u) => !inside.has(u.id))
     .map((u) => ({ label: u.display_name, value: u.id }))
 })
