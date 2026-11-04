@@ -116,4 +116,30 @@ describe('messages', () => {
     expect(await readBodies(carol, dm)).toEqual([])
     await expect(post(carol, dm, 'eavesdrop')).rejects.toThrow(/row-level security/)
   })
+
+  it('stops authors rewriting who or where a message belongs to', async () => {
+    await post(bob, site, 'mine')
+    await asUser(db, bob, async () => {
+      await expect(db.query(`update messages set user_id = $1`, [alice])).rejects.toThrow(/permission denied/)
+      await expect(db.query(`update messages set channel_id = $1`, [secret])).rejects.toThrow(/permission denied/)
+      await expect(db.query(`update messages set created_at = now() - interval '1 day'`)).rejects.toThrow(/permission denied/)
+    })
+  })
+
+  it('stops edits once the author has lost access to the channel', async () => {
+    await post(bob, site, 'before')
+    await db.query(`delete from client_members where user_id = $1`, [bob])
+    await asUser(db, bob, async () => {
+      expect((await db.query(`update messages set body = 'after'`)).affectedRows).toBe(0)
+    })
+    const { rows } = await db.query<{ body: string }>('select body from messages')
+    expect(rows[0]!.body).toBe('before')
+  })
+
+  it('does not stamp edited_at when the body is unchanged', async () => {
+    await post(bob, site, 'same')
+    await asUser(db, bob, () => db.query(`update messages set body = 'same'`))
+    const { rows } = await db.query<{ edited_at: string | null }>('select edited_at from messages')
+    expect(rows[0]!.edited_at).toBeNull()
+  })
 })

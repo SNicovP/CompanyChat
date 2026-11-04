@@ -82,3 +82,6 @@ In the Supabase dashboard (Authentication > URL Configuration) add `<SITE_URL>/*
 - Files go to the private `attachments` storage bucket at `<channel_id>/<message_id>/<n>_<name>`; `message_attachments` records them. Storage policies mirror channel access: only the message author uploads into their message's folder, channel members read, the uploader or a project manager deletes.
 - Viewed through signed URLs (6 hours). PNG/JPEG/GIF/WebP show inline; everything else (including SVG) downloads.
 - Deleting one attachment (the x on hover; the author or a project manager) removes the file but keeps the message, which then shows an "Attachment deleted" tag. Deleting the whole message removes its files too (best effort from the app). Files orphaned by a failed delete can be cleaned up later from the Storage page.
+
+## Editing messages
+Hover your own message and click the pencil, or press Up in an empty composer to edit your latest message. Enter saves, Esc cancels; edited messages show "(edited)". Authors can change only the text (not the author, channel or time), and only while they can still access the channel. No new migration: the rules and the `edited_at` stamp were already in the messages table.
