@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Database } from '~/types/database.types'
+import { effectiveStatus, type DisplayStatus } from '~/utils/status'
 
 type Tables = Database['public']['Tables']
 export type Client = Pick<Tables['clients']['Row'], 'id' | 'name'>
@@ -22,6 +23,7 @@ export const useChatStore = defineStore('chat', () => {
   const directory = ref<Record<string, DirectoryUser>>({})
   const managedClientIds = ref<string[]>([])
   const managedChannelIds = ref<string[]>([])
+  const onlineIds = ref<string[]>([])
   const loaded = ref(false)
 
   const myId = computed(() => me.value?.id ?? me.value?.sub ?? null)
@@ -87,6 +89,54 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = true
   }
 
+  function displayStatus(userId: string | null | undefined): DisplayStatus {
+    if (!userId) return 'offline'
+    return effectiveStatus(directory.value[userId]?.status, onlineIds.value.includes(userId))
+  }
+
+  // --- live presence and profile updates -------------------------------------------------
+  let started: string | null = null
+  let presenceChannel: ReturnType<typeof supabase.channel> | null = null
+  let profileChannel: ReturnType<typeof supabase.channel> | null = null
+
+  /** Idempotent per signed-in user (the auth user object can re-emit on token refresh). */
+  function start() {
+    const id = myId.value
+    if (!id || started === id) return
+    stop()
+    started = id
+
+    presenceChannel = supabase.channel('office-presence', { config: { presence: { key: id } } })
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        onlineIds.value = Object.keys(presenceChannel?.presenceState() ?? {})
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') await presenceChannel?.track({ online_at: new Date().toISOString() })
+      })
+
+    profileChannel = supabase
+      .channel('profiles-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+        const row = payload.new as Partial<DirectoryUser> & { id?: string }
+        if (row?.id && row.display_name !== undefined) {
+          directory.value = {
+            ...directory.value,
+            [row.id]: { id: row.id, display_name: row.display_name, status: row.status!, app_role: row.app_role! },
+          }
+        }
+      })
+      .subscribe()
+  }
+
+  function stop() {
+    if (presenceChannel) supabase.removeChannel(presenceChannel)
+    if (profileChannel) supabase.removeChannel(profileChannel)
+    presenceChannel = profileChannel = null
+    started = null
+    onlineIds.value = []
+  }
+
   async function createClient(name: string) {
     const { error } = await supabase.from('clients').insert({ name: name.trim() })
     if (error) throw error
@@ -112,6 +162,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function reset() {
+    stop()
     clients.value = []
     channels.value = []
     directory.value = {}
@@ -120,5 +171,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
+  return { clients, channels, directory, onlineIds, displayStatus, start, stop, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
 })

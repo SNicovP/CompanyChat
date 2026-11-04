@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { STATUS_OPTIONS, statusMeta } from '~/utils/status'
+import { STATUS_OPTIONS, effectiveStatus } from '~/utils/status'
 
 const supabase = useSupabaseClient()
 const store = useProfileStore()
@@ -12,6 +12,7 @@ watch(
   (u) => {
     if (!u) return
     store.load().catch(() => {})
+    chat.start()
     chat.load().catch((e) => toast.add({ title: 'Could not load chats', description: String(e?.message ?? e), color: 'error' }))
   },
   { immediate: true },
@@ -42,7 +43,7 @@ const items = computed(() => [
       <NuxtLink to="/" class="font-semibold">CompanyChat</NuxtLink>
       <UDropdownMenu v-if="store.profile" :items="items">
         <UButton color="neutral" variant="ghost">
-          <span class="inline-block size-2.5 rounded-full" :class="statusMeta(store.profile.status).color" />
+          <StatusDot :status="effectiveStatus(store.profile.status, true)" />
           {{ store.profile.display_name }}
         </UButton>
       </UDropdownMenu>
