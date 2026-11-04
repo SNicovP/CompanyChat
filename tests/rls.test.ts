@@ -144,6 +144,17 @@ describe('project channels', () => {
     })
   })
 
+  it('lets managers and admins read back the project they just created (insert ... returning)', async () => {
+    const insert = `insert into channels (kind, client_id, name, is_private) values ('project', $1, $2, $3) returning id`
+    await asUser(db, alice, async () => {
+      expect((await db.query(insert, [acme, 'returned', false])).rows).toHaveLength(1)
+      expect((await db.query(insert, [acme, 'returned-private', true])).rows).toHaveLength(1)
+    })
+    await asUser(db, admin, async () => {
+      expect((await db.query(insert, [globex, 'admin-returned', false])).rows).toHaveLength(1)
+    })
+  })
+
   it('shows public projects to all client members but not to outsiders', async () => {
     const site = await createProject(acme, 'website')
     expect(await ids(bob, 'select id from channels')).toEqual([site])
