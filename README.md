@@ -52,3 +52,7 @@ truncate public.messages, public.channel_members, public.channels, public.client
 - Client page (`/clients/<id>`, click a client name in the sidebar): managers and admins add/remove client members and change roles.
 - Project members: the "Members" button in a project channel (private projects: only listed people, the client's managers and admins can see it).
 - Users page (`/admin/users`, admins): see everyone; only the owner changes app roles. Invites still go through the Supabase dashboard.
+
+## Presence
+- Connected users are tracked with Supabase Realtime Presence; anyone not connected shows grey/Offline, connected users show their manual status (Online/Away/Busy/Do not disturb).
+- Status changes reach other users live (profiles are in the realtime publication).

@@ -53,7 +53,7 @@ watch(() => [props.kind, props.id], () => run(load, 'Could not load members'), {
 
     <ul class="divide-y divide-default">
       <li v-for="m in sorted" :key="m.user_id" class="flex items-center justify-between gap-3 py-2">
-        <span>{{ chat.userName(m.user_id) }}<span v-if="m.user_id === chat.myId" class="text-muted"> (you)</span></span>
+        <span class="flex items-center gap-2"><StatusDot :status="chat.displayStatus(m.user_id)" size="sm" />{{ chat.userName(m.user_id) }}<span v-if="m.user_id === chat.myId" class="text-muted">(you)</span></span>
         <div class="flex items-center gap-2">
           <USelect
             v-if="canManage"

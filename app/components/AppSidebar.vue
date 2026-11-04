@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { statusMeta } from '~/utils/status'
-
 const chat = useChatStore()
 const profile = useProfileStore()
 const route = useRoute()
@@ -97,7 +95,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
         class="flex items-center gap-2 rounded px-4 py-1 text-sm hover:bg-elevated"
         :class="{ 'bg-elevated font-medium': activeId === dm.id }"
       >
-        <span class="inline-block size-2 rounded-full" :class="chat.otherUser(dm) ? statusMeta(chat.otherUser(dm)!.status).color : 'bg-neutral-500'" />
+        <StatusDot :status="chat.displayStatus(chat.otherUser(dm)?.id)" size="sm" />
         {{ chat.channelTitle(dm) }}
       </NuxtLink>
     </section>
@@ -115,7 +113,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
           class="flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-elevated"
           @click="openDm(u.id)"
         >
-          <span class="inline-block size-2.5 rounded-full" :class="statusMeta(u.status).color" />
+          <StatusDot :status="chat.displayStatus(u.id)" />
           {{ u.display_name }}
         </button>
       </template>

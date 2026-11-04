@@ -155,6 +155,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         <p v-else-if="!messages.length" class="text-muted">No messages yet. Say hello!</p>
         <div v-for="m in messages" :key="m.id" class="group">
           <div class="flex items-baseline gap-2">
+            <StatusDot :status="chat.displayStatus(m.user_id)" size="sm" class="self-center" />
             <span class="font-semibold">{{ chat.userName(m.user_id) }}</span>
             <span class="text-xs text-muted">{{ time(m.created_at) }}<span v-if="m.edited_at"> (edited)</span></span>
             <UButton

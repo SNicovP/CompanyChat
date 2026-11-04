@@ -10,3 +10,15 @@ export const STATUS_OPTIONS: { value: UserStatus; label: string; color: string }
 export function statusMeta(status: UserStatus) {
   return STATUS_OPTIONS.find((s) => s.value === status) ?? STATUS_OPTIONS[0]!
 }
+
+/** What other people see: connected users show their manual status, everyone else is offline. */
+export type DisplayStatus = UserStatus | 'offline'
+
+export function effectiveStatus(manual: UserStatus | undefined, connected: boolean): DisplayStatus {
+  return connected ? (manual ?? 'online') : 'offline'
+}
+
+export function displayMeta(status: DisplayStatus) {
+  if (status === 'offline') return { value: 'offline' as const, label: 'Offline', color: 'bg-neutral-500' }
+  return statusMeta(status)
+}
