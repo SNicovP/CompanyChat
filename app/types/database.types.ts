@@ -186,6 +186,57 @@ export type Database = {
           },
         ]
       }
+      message_attachments: {
+        Row: {
+          channel_id: string
+          created_at: string
+          deleted_at: string | null
+          file_name: string
+          id: string
+          message_id: string
+          mime_type: string | null
+          path: string
+          size_bytes: number
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name: string
+          id?: string
+          message_id: string
+          mime_type?: string | null
+          path: string
+          size_bytes: number
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name?: string
+          id?: string
+          message_id?: string
+          mime_type?: string | null
+          path?: string
+          size_bytes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_attachments_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           body: string
