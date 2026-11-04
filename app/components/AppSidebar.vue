@@ -14,9 +14,7 @@ const dmOpen = ref(false)
 const activeId = computed(() => String(route.params.id ?? ''))
 
 function fail(title: string, e: unknown) {
-  // Supabase errors are plain objects with a `message`, not Error instances.
-  const message = typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)
-  toast.add({ title, description: message, color: 'error' })
+  toast.add({ title, description: errorMessage(e), color: 'error' })
 }
 
 async function onNewClient(name: string) {
@@ -58,7 +56,7 @@ const people = computed(() => Object.values(chat.directory).filter((u) => u.id !
 
 // Admins add clients; admins and that client's managers add projects; RLS is the real gate, this just hides the button.
 const canCreateClient = computed(() => profile.isAdmin)
-const canCreateProject = (clientId: string) => profile.isAdmin || chat.managedClientIds.includes(clientId)
+const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
 </script>
 
 <template>
@@ -71,7 +69,7 @@ const canCreateProject = (clientId: string) => profile.isAdmin || chat.managedCl
       <p v-if="chat.loaded && !chat.clients.length" class="px-2 text-sm text-muted">No clients yet.</p>
       <div v-for="client in chat.clients" :key="client.id" class="mb-2">
         <div class="flex items-center justify-between px-2 text-sm font-medium">
-          {{ client.name }}
+          <NuxtLink :to="`/clients/${client.id}`" class="hover:underline">{{ client.name }}</NuxtLink>
           <UButton v-if="canCreateProject(client.id)" icon="i-lucide-plus" size="xs" color="neutral" variant="ghost" aria-label="New project" @click="openNewProject(client.id)" />
         </div>
         <NuxtLink

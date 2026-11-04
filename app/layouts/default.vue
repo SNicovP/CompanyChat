@@ -22,6 +22,7 @@ const items = computed(() => [
     label: s.label,
     onSelect: () => store.setStatus(s.value).catch(() => toast.add({ title: 'Could not update status', color: 'error' })),
   })),
+  ...(store.isAdmin ? [[{ label: 'Manage users', icon: 'i-lucide-shield', to: '/admin/users' }]] : []),
   [{
     label: 'Sign out',
     icon: 'i-lucide-log-out',
