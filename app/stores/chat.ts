@@ -152,7 +152,7 @@ export const useChatStore = defineStore('chat', () => {
     const channel = channels.value.find((c) => c.id === m.channel_id)
     if (!channel) return
     const body = m.body ?? ''
-    const mentionsMe = !!myId.value && body.toLowerCase().includes(`@[${myId.value.toLowerCase()}]`)
+    const mentionsMe = mentionsUser(body, myId.value)
     const decision = notifyDecision({
       fromSelf: m.user_id === myId.value,
       windowFocused: viewing(),

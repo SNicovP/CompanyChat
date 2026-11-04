@@ -44,9 +44,14 @@ const editMap = ref<Record<string, string>>({}) // name -> user id for mentions 
 const mentionMap = ref<Record<string, string>>({}) // name -> user id for mentions picked in this draft
 const picker = reactive({ open: false, start: 0, query: '', index: 0 })
 let composerEl: HTMLTextAreaElement | null = null
-const candidates = computed(() =>
-  picker.open ? filterPeople(chat.activePeople.filter((u) => u.id !== chat.myId), picker.query) : [],
-)
+// "@channel" (everyone who can see this channel) is offered first; it is pointless in a 1:1 DM.
+const everyoneOption = { id: CHANNEL_MENTION, display_name: CHANNEL_MENTION }
+const candidates = computed(() => {
+  if (!picker.open) return []
+  const people = filterPeople(chat.activePeople.filter((u) => u.id !== chat.myId), picker.query)
+  const offerEveryone = channel.value?.kind !== 'dm' && CHANNEL_MENTION.startsWith(picker.query.toLowerCase())
+  return offerEveryone ? [everyoneOption, ...people].slice(0, 6) : people
+})
 
 function sortMessages() {
   messages.value.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
@@ -382,7 +387,7 @@ function onComposerKeydown(e: KeyboardEvent) {
   else if (e.key === 'ArrowUp') onArrowUp(e)
 }
 
-const mentionsMe = (m: Message) => !!chat.myId && m.body.toLowerCase().includes(`@[${chat.myId.toLowerCase()}]`)
+const mentionsMe = (m: Message) => mentionsUser(m.body, chat.myId)
 
 function onEnter(e: KeyboardEvent) {
   if (e.shiftKey) return // newline
@@ -546,8 +551,10 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               :class="{ 'bg-elevated': i === picker.index }"
               @mousedown.prevent="pick(p)"
             >
-              <StatusDot :status="chat.displayStatus(p.id)" size="sm" />
+              <UIcon v-if="p.id === CHANNEL_MENTION" name="i-lucide-users" class="size-3" />
+              <StatusDot v-else :status="chat.displayStatus(p.id)" size="sm" />
               {{ p.display_name }}
+              <span v-if="p.id === CHANNEL_MENTION" class="text-xs text-muted">notify everyone here</span>
             </li>
           </ul>
           <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
