@@ -14,11 +14,18 @@ export interface NotifyInput {
  * DMs and @mentions always notify; other project messages only if you watch the channel.
  * Nothing while you are in the window, from yourself, or on Do not disturb.
  */
-export function shouldNotify(i: NotifyInput): boolean {
-  if (i.fromSelf || i.windowFocused || i.status === 'dnd') return false
-  if (i.mentionsMe || i.kind === 'dm') return true
+export function notifyDecision(i: NotifyInput): { notify: boolean; reason: string } {
+  if (i.fromSelf) return { notify: false, reason: 'your own message' }
+  if (i.windowFocused) return { notify: false, reason: 'this window has focus' }
+  if (i.status === 'dnd') return { notify: false, reason: 'status is Do not disturb' }
+  if (i.mentionsMe) return { notify: true, reason: 'you were mentioned' }
+  if (i.kind === 'dm') return { notify: true, reason: 'direct message' }
   return i.watching
+    ? { notify: true, reason: 'you watch this channel' }
+    : { notify: false, reason: 'project message in a channel you do not watch (only mentions notify)' }
 }
+
+export const shouldNotify = (i: NotifyInput): boolean => notifyDecision(i).notify
 
 export function truncate(text: string, max = 140): string {
   const flat = text.replace(/\s+/g, ' ').trim()

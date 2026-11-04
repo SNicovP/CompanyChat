@@ -47,6 +47,33 @@ async function toggleNotifications() {
 
 const onOff = (v: boolean) => (v ? 'On' : 'Off')
 
+function notificationState() {
+  if (notifier.permission.value === 'denied') return 'Blocked in browser'
+  return onOff(notifier.active.value)
+}
+
+function sendTest() {
+  if (notifier.permission.value !== 'granted') {
+    toast.add({
+      title: 'Notifications are not allowed yet',
+      description: notifier.permission.value === 'denied'
+        ? 'Your browser is blocking them for this site. Allow notifications in the site settings, then try again.'
+        : 'Turn on desktop notifications first.',
+      color: 'warning',
+    })
+    return
+  }
+  const problem = notifier.test()
+  toast.add(
+    problem
+      ? { title: 'Could not show a notification', description: problem, color: 'error' }
+      : {
+          title: 'Test notification sent',
+          description: 'If you saw nothing, check your computer\'s notification settings for this browser and that Focus / Do Not Disturb is off.',
+        },
+  )
+}
+
 const items = computed(() => [
   STATUS_OPTIONS.map((s) => ({
     label: s.label,
@@ -54,7 +81,8 @@ const items = computed(() => [
   })),
   ...(notifier.supported.value
     ? [[
-        { label: `Desktop notifications: ${onOff(notifier.active.value)}`, icon: 'i-lucide-bell', onSelect: toggleNotifications },
+        { label: `Desktop notifications: ${notificationState()}`, icon: 'i-lucide-bell', onSelect: toggleNotifications },
+        { label: 'Send a test notification', icon: 'i-lucide-bell-ring', onSelect: sendTest },
         { label: `Notification sound: ${onOff(notifier.prefs.value.sound)}`, icon: 'i-lucide-volume-2', onSelect: () => notifier.set('sound', !notifier.prefs.value.sound) },
         { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: () => notifier.set('preview', !notifier.prefs.value.preview) },
       ]]

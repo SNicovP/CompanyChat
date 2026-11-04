@@ -148,11 +148,12 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function notifyAbout(m: { channel_id: string; user_id: string | null; body: string }) {
+    console.debug('[notify] message received in realtime')
     const channel = channels.value.find((c) => c.id === m.channel_id)
     if (!channel) return
     const body = m.body ?? ''
     const mentionsMe = !!myId.value && body.toLowerCase().includes(`@[${myId.value.toLowerCase()}]`)
-    const notify = shouldNotify({
+    const decision = notifyDecision({
       fromSelf: m.user_id === myId.value,
       windowFocused: viewing(),
       status: profileStore.profile?.status,
@@ -160,7 +161,8 @@ export const useChatStore = defineStore('chat', () => {
       mentionsMe,
       watching: watchedChannelIds.value.includes(channel.id),
     })
-    if (!notify) return
+    console.debug('[notify]', decision.notify ? 'showing' : 'skipped', '-', decision.reason)
+    if (!decision.notify) return
     const text = notificationText({
       kind: channel.kind,
       senderName: userName(m.user_id),
@@ -168,7 +170,8 @@ export const useChatStore = defineStore('chat', () => {
       body,
       nameOf: userName,
     })
-    notifier.show({ channelId: channel.id, ...text })
+    const problem = notifier.show({ channelId: channel.id, ...text })
+    if (problem) console.debug('[notify] not shown:', problem)
   }
 
   async function setWatching(channelId: string, on: boolean) {
