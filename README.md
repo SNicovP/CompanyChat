@@ -124,3 +124,10 @@ search (`simple` config, all words must match, newest first, max 100) over a gen
 It is `SECURITY INVOKER`, so the existing messages RLS decides what each person can find: private channels you are
 not in and other people's DMs never appear. Mention tokens are excluded from the index. Clicking a result opens
 the channel at `?m=<message id>`, scrolls to that message (loading older history if needed) and highlights it for a few seconds.
+
+## @channel
+
+Typing `@` offers **@channel** first in project channels and group conversations (not 1:1 DMs); hand-typing `@channel` works too.
+It is stored as the token `@[channel]`. The `sync_message_mentions` trigger expands it into `message_mentions` rows for
+everyone who can see the channel (minus the author and deactivated users), so unread `@` badges, the highlighted message
+and desktop notifications behave exactly like personal mentions. Private channels only reach their own members.

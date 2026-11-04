@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMention, displayToTokens, filterPeople, findMentionQuery, splitMentions, tokensToDisplay } from '../app/utils/mentions'
+import { CHANNEL_MENTION, mentionsUser, applyMention, displayToTokens, filterPeople, findMentionQuery, splitMentions, tokensToDisplay } from '../app/utils/mentions'
 
 const BOB = '11111111-1111-4111-8111-111111111111'
 const JANE = '22222222-2222-4222-8222-222222222222'
@@ -64,5 +64,35 @@ describe('applyMention and filterPeople', () => {
     const people = [{ display_name: 'Maria' }, { display_name: 'Ari' }, { display_name: 'Arnold' }]
     expect(filterPeople(people, 'ar').map((p) => p.display_name)).toEqual(['Ari', 'Arnold', 'Maria'])
     expect(filterPeople(people, '', 2)).toHaveLength(2)
+  })
+})
+
+describe('@channel', () => {
+  it('is split out as its own segment, case-insensitively', () => {
+    expect(splitMentions('hi @[channel] and @[Channel]')).toEqual([
+      { type: 'text', text: 'hi ' },
+      { type: 'channel' },
+      { type: 'text', text: ' and ' },
+      { type: 'channel' },
+    ])
+  })
+
+  it('round-trips between stored and editable form', () => {
+    const { text, map } = tokensToDisplay(`@[channel] meet @[${BOB}]`, () => 'Bob')
+    expect(text).toBe('@channel meet @Bob')
+    expect(displayToTokens(text, map)).toBe(`@[channel] meet @[${BOB}]`)
+  })
+
+  it('converts a hand-typed @channel but not email-like or longer words', () => {
+    expect(displayToTokens('@channel hi', {})).toBe('@[channel] hi')
+    expect(displayToTokens('a@channel.com @channels', {})).toBe('a@channel.com @channels')
+  })
+
+  it('mentionsUser matches personal mentions and @channel', () => {
+    expect(mentionsUser(`hi @[${BOB}]`, BOB)).toBe(true)
+    expect(mentionsUser('hi @[channel]', BOB)).toBe(true)
+    expect(mentionsUser(`hi @[${JANE}]`, BOB)).toBe(false)
+    expect(mentionsUser('hi', null)).toBe(false)
+    expect(CHANNEL_MENTION).toBe('channel')
   })
 })

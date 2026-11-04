@@ -109,3 +109,35 @@ describe('mention privacy and counts', () => {
     expect((await db.query<{ ok: boolean }>(`select can_user_access_channel($1, $2) as ok`, [carol, site])).rows[0]!.ok).toBe(false)
   })
 })
+
+describe('@channel', () => {
+  it('mentions everyone who can see the channel except the author', async () => {
+    const m = await post(bob, site, 'standup in 5 @[channel]')
+    // owner sees every project; alice manages the client; dave is a client member; carol is an outsider
+    expect(await mentioned(m)).toEqual([owner, alice, dave].sort())
+  })
+
+  it('only reaches people who can see a private channel', async () => {
+    const m = await post(alice, secret, '@[channel] budget is approved')
+    expect(await mentioned(m)).toEqual([owner])
+  })
+
+  it('skips deactivated users and is case-insensitive', async () => {
+    await db.query(`update profiles set is_active = false where id = $1`, [dave])
+    const m = await post(bob, site, '@[Channel] hello')
+    expect(await mentioned(m)).toEqual([owner, alice].sort())
+  })
+
+  it('combines with personal mentions and follows edits', async () => {
+    const m = await post(alice, site, `hi ${tag(bob)}`)
+    expect(await mentioned(m)).toEqual([bob])
+    await asUser(db, alice, () => db.query(`update messages set body = $1 where id = $2`, ['@[channel] hi', m]))
+    expect(await mentioned(m)).toEqual([owner, bob, dave].sort())
+    await asUser(db, alice, () => db.query(`update messages set body = $1 where id = $2`, ['no more', m]))
+    expect(await mentioned(m)).toEqual([])
+  })
+
+  it('is not triggered by the plain text "@channel"', async () => {
+    expect(await mentioned(await post(bob, site, 'talk to @channel later'))).toEqual([])
+  })
+})
