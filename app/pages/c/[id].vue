@@ -19,6 +19,7 @@ const draft = ref('')
 const sending = ref(false)
 const loading = ref(true)
 const scroller = ref<HTMLElement | null>(null)
+const membersOpen = ref(false)
 
 function sortMessages() {
   messages.value.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
@@ -128,9 +129,23 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="border-b border-default px-4 py-2 font-medium">
-      {{ channel ? chat.channelTitle(channel) : '…' }}
+    <div class="flex items-center justify-between border-b border-default px-4 py-2">
+      <span class="font-medium">{{ channel ? chat.channelTitle(channel) : '…' }}</span>
+      <UButton v-if="channel?.kind === 'project'" icon="i-lucide-users" size="sm" color="neutral" variant="ghost" @click="membersOpen = true">
+        Members
+      </UButton>
     </div>
+
+    <UModal v-if="channel?.kind === 'project'" v-model:open="membersOpen" title="Project members">
+      <template #body>
+        <p class="mb-3 text-sm text-muted">
+          {{ channel.is_private
+            ? 'Private project: only these people, the client\'s managers and admins can see it.'
+            : 'Everyone in the client can see this project. Add people here to make them project managers or to track who is on it.' }}
+        </p>
+        <MembersEditor kind="channel" :id="channel.id" :can-manage="chat.canManageChannel(channel)" />
+      </template>
+    </UModal>
 
     <div v-if="chat.loaded && !channel" class="p-6 text-muted">This conversation doesn't exist or you don't have access.</div>
 

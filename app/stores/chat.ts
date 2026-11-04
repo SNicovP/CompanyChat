@@ -21,6 +21,7 @@ export const useChatStore = defineStore('chat', () => {
   const channels = ref<Channel[]>([])
   const directory = ref<Record<string, DirectoryUser>>({})
   const managedClientIds = ref<string[]>([])
+  const managedChannelIds = ref<string[]>([])
   const loaded = ref(false)
 
   const myId = computed(() => me.value?.id ?? me.value?.sub ?? null)
@@ -49,17 +50,28 @@ export const useChatStore = defineStore('chat', () => {
     return (id && directory.value[id]?.display_name) || 'Unknown'
   }
 
+  const profileStore = useProfileStore()
+
+  // UI hints only: RLS is what actually enforces these.
+  const canManageClient = (clientId: string) => profileStore.isAdmin || managedClientIds.value.includes(clientId)
+  const canManageChannel = (channel: Channel | undefined) =>
+    !!channel && channel.kind === 'project' && (
+      (channel.client_id !== null && canManageClient(channel.client_id)) || managedChannelIds.value.includes(channel.id)
+    )
+
   async function load() {
-    const [c, ch, p, mine] = await Promise.all([
+    const [c, ch, p, mine, mineCh] = await Promise.all([
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('channels').select('id, kind, client_id, name, is_private, channel_members(user_id)'),
       supabase.from('profiles').select('id, display_name, status, app_role').order('display_name'),
       supabase.from('client_members').select('client_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
+      supabase.from('channel_members').select('channel_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
     ])
     if (c.error) throw c.error
     if (ch.error) throw ch.error
     if (p.error) throw p.error
     if (mine.error) throw mine.error
+    if (mineCh.error) throw mineCh.error
     clients.value = c.data
     channels.value = ch.data.map((row) => ({
       id: row.id,
@@ -70,6 +82,7 @@ export const useChatStore = defineStore('chat', () => {
       member_ids: row.channel_members.map((m) => m.user_id),
     }))
     managedClientIds.value = mine.data.map((m) => m.client_id)
+    managedChannelIds.value = mineCh.data.map((m) => m.channel_id)
     directory.value = Object.fromEntries(p.data.map((u) => [u.id, u]))
     loaded.value = true
   }
@@ -103,8 +116,9 @@ export const useChatStore = defineStore('chat', () => {
     channels.value = []
     directory.value = {}
     managedClientIds.value = []
+    managedChannelIds.value = []
     loaded.value = false
   }
 
-  return { clients, channels, directory, managedClientIds, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
+  return { clients, channels, directory, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
 })
