@@ -75,10 +75,11 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
           :key="p.id"
           :to="`/c/${p.id}`"
           class="flex items-center gap-1 rounded px-4 py-1 text-sm hover:bg-elevated"
-          :class="{ 'bg-elevated font-medium': activeId === p.id }"
+          :class="{ 'bg-elevated font-medium': activeId === p.id, 'font-semibold': chat.unread[p.id] }"
         >
           <UIcon v-if="p.is_private" name="i-lucide-lock" class="size-3" />
           {{ p.name }}
+          <UBadge v-if="chat.unread[p.id]" size="sm" class="ml-auto">{{ chat.unread[p.id] }}</UBadge>
         </NuxtLink>
       </div>
     </section>
@@ -93,10 +94,11 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
         :key="dm.id"
         :to="`/c/${dm.id}`"
         class="flex items-center gap-2 rounded px-4 py-1 text-sm hover:bg-elevated"
-        :class="{ 'bg-elevated font-medium': activeId === dm.id }"
+        :class="{ 'bg-elevated font-medium': activeId === dm.id, 'font-semibold': chat.unread[dm.id] }"
       >
         <StatusDot :status="chat.displayStatus(chat.otherUser(dm)?.id)" size="sm" />
         {{ chat.channelTitle(dm) }}
+        <UBadge v-if="chat.unread[dm.id]" size="sm" class="ml-auto">{{ chat.unread[dm.id] }}</UBadge>
       </NuxtLink>
     </section>
 

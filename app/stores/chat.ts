@@ -24,6 +24,8 @@ export const useChatStore = defineStore('chat', () => {
   const managedClientIds = ref<string[]>([])
   const managedChannelIds = ref<string[]>([])
   const onlineIds = ref<string[]>([])
+  const unread = ref<Record<string, number>>({})
+  const activeChannelId = ref<string | null>(null)
   const loaded = ref(false)
 
   const myId = computed(() => me.value?.id ?? me.value?.sub ?? null)
@@ -36,6 +38,8 @@ export const useChatStore = defineStore('chat', () => {
     for (const list of Object.values(map)) list.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
     return map
   })
+
+  const totalUnread = computed(() => Object.values(unread.value).reduce((a, b) => a + b, 0))
 
   const dms = computed(() => channels.value.filter((c) => c.kind === 'dm'))
 
@@ -87,6 +91,7 @@ export const useChatStore = defineStore('chat', () => {
     managedChannelIds.value = mineCh.data.map((m) => m.channel_id)
     directory.value = Object.fromEntries(p.data.map((u) => [u.id, u]))
     loaded.value = true
+    await loadUnread()
   }
 
   function displayStatus(userId: string | null | undefined): DisplayStatus {
@@ -94,10 +99,43 @@ export const useChatStore = defineStore('chat', () => {
     return effectiveStatus(directory.value[userId]?.status, onlineIds.value.includes(userId))
   }
 
+  // --- unread counts ---------------------------------------------------------------------
+  const viewing = () => typeof document !== 'undefined' && document.hasFocus()
+
+  async function loadUnread() {
+    const { data, error } = await supabase.rpc('get_unread_counts')
+    if (error) return // counts are a nicety; never block the app on them
+    const counts = Object.fromEntries(data.map((r) => [r.chan_id, Number(r.unread)]))
+    if (activeChannelId.value && viewing()) delete counts[activeChannelId.value]
+    unread.value = counts
+  }
+
+  async function markRead(channelId: string) {
+    if (unread.value[channelId]) unread.value = { ...unread.value, [channelId]: 0 }
+    await supabase.rpc('mark_channel_read', { chid: channelId })
+  }
+
+  function setActive(channelId: string | null) {
+    activeChannelId.value = channelId
+    if (channelId) markRead(channelId)
+  }
+
+  async function onIncomingMessage(m: { channel_id: string; user_id: string | null }) {
+    if (m.user_id === myId.value) return
+    if (!channels.value.some((c) => c.id === m.channel_id)) {
+      await load() // e.g. someone just started a DM with us
+      return
+    }
+    if (m.channel_id === activeChannelId.value && viewing()) markRead(m.channel_id)
+    else unread.value = { ...unread.value, [m.channel_id]: (unread.value[m.channel_id] ?? 0) + 1 }
+  }
+
   // --- live presence and profile updates -------------------------------------------------
   let started: string | null = null
   let presenceChannel: ReturnType<typeof supabase.channel> | null = null
   let profileChannel: ReturnType<typeof supabase.channel> | null = null
+  let messageChannel: ReturnType<typeof supabase.channel> | null = null
+  const onFocus = () => { if (activeChannelId.value) markRead(activeChannelId.value) }
 
   /** Idempotent per signed-in user (the auth user object can re-emit on token refresh). */
   function start() {
@@ -127,14 +165,27 @@ export const useChatStore = defineStore('chat', () => {
         }
       })
       .subscribe()
+
+    // RLS filters these events, so we only hear about channels we can access.
+    messageChannel = supabase
+      .channel('messages-all')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        onIncomingMessage(payload.new as { channel_id: string; user_id: string | null })
+      })
+      .subscribe()
+    window.addEventListener('focus', onFocus)
   }
 
   function stop() {
+    if (messageChannel) supabase.removeChannel(messageChannel)
+    messageChannel = null
+    if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
     if (presenceChannel) supabase.removeChannel(presenceChannel)
     if (profileChannel) supabase.removeChannel(profileChannel)
     presenceChannel = profileChannel = null
     started = null
     onlineIds.value = []
+    unread.value = {}
   }
 
   async function createClient(name: string) {
@@ -171,5 +222,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, displayStatus, start, stop, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
+  return { clients, channels, directory, onlineIds, displayStatus, start, stop, unread, totalUnread, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
 })

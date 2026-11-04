@@ -83,12 +83,16 @@ function unsubscribe() {
 watch(
   channelId,
   (id) => {
+    chat.setActive(id)
     loadMessages(id)
     subscribe(id)
   },
   { immediate: true },
 )
-onBeforeUnmount(unsubscribe)
+onBeforeUnmount(() => {
+  unsubscribe()
+  chat.setActive(null)
+})
 
 async function send() {
   const body = draft.value.trim()
