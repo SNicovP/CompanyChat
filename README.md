@@ -117,3 +117,10 @@ In Supabase:
 
 Before inviting the whole office, set up **custom SMTP** (Authentication, SMTP Settings). Supabase's built-in
 email service is heavily rate-limited and only meant for testing.
+## Search
+
+`Cmd/Ctrl+K` (or the sidebar button) searches messages. `search_messages(q, lim)` is a word-prefix full-text
+search (`simple` config, all words must match, newest first, max 100) over a generated `body_tsv` column with a GIN index.
+It is `SECURITY INVOKER`, so the existing messages RLS decides what each person can find: private channels you are
+not in and other people's DMs never appear. Mention tokens are excluded from the index. Clicking a result opens
+the channel (it does not yet scroll to the message).

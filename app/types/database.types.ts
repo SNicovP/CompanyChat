@@ -405,6 +405,10 @@ export type Database = {
         Args: never
         Returns: { chan_id: string; mentions: number }[]
       }
+      search_messages: {
+        Args: { q: string; lim?: number }
+        Returns: { id: string; channel_id: string; user_id: string | null; body: string; created_at: string }[]
+      }
       is_app_admin: { Args: never; Returns: boolean }
       is_channel_member: { Args: { chid: string }; Returns: boolean }
       is_client_member: { Args: { cid: string }; Returns: boolean }
