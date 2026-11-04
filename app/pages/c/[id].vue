@@ -73,7 +73,43 @@ async function loadMessages(id: string) {
     return
   }
   messages.value = data.reverse()
-  await scrollToBottom()
+  const target = typeof route.query.m === 'string' ? route.query.m : null
+  if (target) await jumpTo(target)
+  else await scrollToBottom()
+}
+
+// Opened from search (?m=<message id>): show that message, scroll to it and flash it.
+const highlightId = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | undefined
+
+async function jumpTo(messageId: string) {
+  const id = channelId.value
+  if (!messages.value.some((x) => x.id === messageId)) {
+    // Older than the latest page: load from that message onwards.
+    const { data: target } = await supabase.from('messages').select('created_at').eq('id', messageId).eq('channel_id', id).maybeSingle()
+    if (target) {
+      const { data } = await supabase
+        .from('messages')
+        .select(MESSAGE_COLUMNS)
+        .eq('channel_id', id)
+        .gte('created_at', target.created_at)
+        .order('created_at', { ascending: true })
+        .limit(500)
+      if (id !== channelId.value) return
+      if (data?.some((x) => x.id === messageId)) messages.value = data
+    }
+  }
+  await nextTick()
+  const el = scroller.value?.querySelector(`[data-message-id="${messageId}"]`)
+  if (el) {
+    el.scrollIntoView({ block: 'center' })
+    highlightId.value = messageId
+    clearTimeout(highlightTimer)
+    highlightTimer = setTimeout(() => (highlightId.value = null), 3000)
+  } else {
+    await scrollToBottom() // message no longer exists
+  }
+  await navigateTo({ path: route.path, query: {} }, { replace: true }) // so a refresh does not re-trigger
 }
 
 let realtime: ReturnType<typeof supabase.channel> | null = null
@@ -133,7 +169,15 @@ watch(
   },
   { immediate: true },
 )
+// Searching from inside the channel you are already in only changes the query.
+watch(
+  () => route.query.m,
+  (m) => {
+    if (typeof m === 'string' && !loading.value) jumpTo(m)
+  },
+)
 onBeforeUnmount(() => {
+  clearTimeout(highlightTimer)
   unsubscribe()
   chat.setActive(null)
 })
@@ -412,7 +456,13 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
       <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
         <p v-if="loading" class="text-muted">Loading…</p>
         <p v-else-if="!messages.length" class="text-muted">No messages yet. Say hello!</p>
-        <div v-for="m in messages" :key="m.id" class="group" :class="{ 'border-l-2 border-primary pl-2': mentionsMe(m) }">
+        <div
+          v-for="m in messages"
+          :key="m.id"
+          :data-message-id="m.id"
+          class="group -mx-2 rounded px-2 py-1 transition-colors duration-700"
+          :class="[mentionsMe(m) ? 'border-l-2 border-primary' : '', highlightId === m.id ? 'bg-primary/20' : '']"
+        >
           <div class="flex items-baseline gap-2">
             <StatusDot :status="chat.displayStatus(m.user_id)" size="sm" class="self-center" />
             <span class="font-semibold">{{ chat.userName(m.user_id) }}</span>
