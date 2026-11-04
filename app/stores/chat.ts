@@ -27,6 +27,7 @@ export const useChatStore = defineStore('chat', () => {
   const unread = ref<Record<string, number>>({})
   const mentions = ref<Record<string, number>>({})
   const activeChannelId = ref<string | null>(null)
+  const watchedChannelIds = ref<string[]>([])
   const loaded = ref(false)
 
   const myId = computed(() => me.value?.id ?? me.value?.sub ?? null)
@@ -61,6 +62,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   const profileStore = useProfileStore()
+  const notifier = useNotifier()
 
   // UI hints only: RLS is what actually enforces these.
   const canManageClient = (clientId: string) => profileStore.isAdmin || managedClientIds.value.includes(clientId)
@@ -70,18 +72,20 @@ export const useChatStore = defineStore('chat', () => {
     )
 
   async function load() {
-    const [c, ch, p, mine, mineCh] = await Promise.all([
+    const [c, ch, p, mine, mineCh, watches] = await Promise.all([
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('channels').select('id, kind, client_id, name, is_private, channel_members(user_id)'),
       supabase.from('profiles').select('id, display_name, status, app_role, is_active').order('display_name'),
       supabase.from('client_members').select('client_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
       supabase.from('channel_members').select('channel_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
+      supabase.from('channel_watches').select('channel_id'),
     ])
     if (c.error) throw c.error
     if (ch.error) throw ch.error
     if (p.error) throw p.error
     if (mine.error) throw mine.error
     if (mineCh.error) throw mineCh.error
+    if (watches.error) throw watches.error
     clients.value = c.data
     channels.value = ch.data.map((row) => ({
       id: row.id,
@@ -93,6 +97,7 @@ export const useChatStore = defineStore('chat', () => {
     }))
     managedClientIds.value = mine.data.map((m) => m.client_id)
     managedChannelIds.value = mineCh.data.map((m) => m.channel_id)
+    watchedChannelIds.value = watches.data.map((w) => w.channel_id)
     directory.value = Object.fromEntries(p.data.map((u) => [u.id, u]))
     loaded.value = true
     await loadUnread()
@@ -131,7 +136,7 @@ export const useChatStore = defineStore('chat', () => {
     if (channelId) markRead(channelId)
   }
 
-  async function onIncomingMessage(m: { channel_id: string; user_id: string | null }) {
+  async function onIncomingMessage(m: { channel_id: string; user_id: string | null; body?: string }) {
     if (m.user_id === myId.value) return
     if (!channels.value.some((c) => c.id === m.channel_id)) {
       await load() // e.g. someone just started a DM with us
@@ -139,6 +144,43 @@ export const useChatStore = defineStore('chat', () => {
     }
     if (m.channel_id === activeChannelId.value && viewing()) markRead(m.channel_id)
     else unread.value = { ...unread.value, [m.channel_id]: (unread.value[m.channel_id] ?? 0) + 1 }
+    notifyAbout(m as { channel_id: string; user_id: string | null; body: string })
+  }
+
+  function notifyAbout(m: { channel_id: string; user_id: string | null; body: string }) {
+    const channel = channels.value.find((c) => c.id === m.channel_id)
+    if (!channel) return
+    const body = m.body ?? ''
+    const mentionsMe = !!myId.value && body.toLowerCase().includes(`@[${myId.value.toLowerCase()}]`)
+    const notify = shouldNotify({
+      fromSelf: m.user_id === myId.value,
+      windowFocused: viewing(),
+      status: profileStore.profile?.status,
+      kind: channel.kind,
+      mentionsMe,
+      watching: watchedChannelIds.value.includes(channel.id),
+    })
+    if (!notify) return
+    const text = notificationText({
+      kind: channel.kind,
+      senderName: userName(m.user_id),
+      channelName: channel.name,
+      body,
+      nameOf: userName,
+    })
+    notifier.show({ channelId: channel.id, ...text })
+  }
+
+  async function setWatching(channelId: string, on: boolean) {
+    if (on) {
+      const { error } = await supabase.from('channel_watches').insert({ channel_id: channelId })
+      if (error) throw error
+      watchedChannelIds.value = [...watchedChannelIds.value, channelId]
+    } else {
+      const { error } = await supabase.from('channel_watches').delete().eq('channel_id', channelId)
+      if (error) throw error
+      watchedChannelIds.value = watchedChannelIds.value.filter((id) => id !== channelId)
+    }
   }
 
   // --- live presence and profile updates -------------------------------------------------
@@ -182,7 +224,7 @@ export const useChatStore = defineStore('chat', () => {
     messageChannel = supabase
       .channel('messages-all')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        onIncomingMessage(payload.new as { channel_id: string; user_id: string | null })
+        onIncomingMessage(payload.new as { channel_id: string; user_id: string | null; body?: string })
       })
       .subscribe()
 
@@ -244,8 +286,9 @@ export const useChatStore = defineStore('chat', () => {
     directory.value = {}
     managedClientIds.value = []
     managedChannelIds.value = []
+    watchedChannelIds.value = []
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
 })

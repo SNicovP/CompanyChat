@@ -24,6 +24,15 @@ const sending = ref(false)
 const loading = ref(true)
 const scroller = ref<HTMLElement | null>(null)
 const membersOpen = ref(false)
+const watching = computed(() => chat.watchedChannelIds.includes(channelId.value))
+
+async function toggleWatch() {
+  try {
+    await chat.setWatching(channelId.value, !watching.value)
+  } catch (e) {
+    toast.add({ title: 'Could not change notifications', description: errorMessage(e), color: 'error' })
+  }
+}
 const files = ref<File[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
@@ -370,9 +379,20 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
   <div class="flex h-full flex-col">
     <div class="flex items-center justify-between border-b border-default px-4 py-2">
       <span class="font-medium">{{ channel ? chat.channelTitle(channel) : '…' }}</span>
-      <UButton v-if="channel?.kind === 'project'" icon="i-lucide-users" size="sm" color="neutral" variant="ghost" @click="membersOpen = true">
-        Members
-      </UButton>
+      <div v-if="channel?.kind === 'project'" class="flex items-center gap-1">
+        <UButton
+          :icon="watching ? 'i-lucide-bell-ring' : 'i-lucide-bell'"
+          size="sm"
+          :color="watching ? 'primary' : 'neutral'"
+          variant="ghost"
+          :title="watching ? 'Notifying for every message. Click to only be notified for @mentions.' : 'Click to get desktop notifications for every message here (mentions always notify).'"
+          :aria-label="watching ? 'Stop notifying for every message' : 'Notify me for every message'"
+          @click="toggleWatch"
+        />
+        <UButton icon="i-lucide-users" size="sm" color="neutral" variant="ghost" @click="membersOpen = true">
+          Members
+        </UButton>
+      </div>
     </div>
 
     <UModal v-if="channel?.kind === 'project'" v-model:open="membersOpen" title="Project members">

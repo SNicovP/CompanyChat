@@ -91,3 +91,8 @@ Hover your own message and click the pencil, or press Up in an empty composer to
 - The database derives `message_mentions` from the body with a trigger: only active people who can see the channel are recorded, never the author, at most 20 per message. Editing a message updates its mentions.
 - Mentioned people get a red `@N` badge in the sidebar, `(@N)` in the tab title, and the message is highlighted with their name emphasised.
 - Limits: new mentions can't be added while editing an old message yet (existing ones are kept), and there is no `@channel`/`@everyone`.
+
+## Desktop notifications
+- Browser notifications (plus an optional short sound) while the window is in the background. Direct messages and @mentions always notify; other project messages only for channels you "watch" (bell button in the channel header). Nothing is sent for your own messages, while the window is focused, or while your status is Do not disturb.
+- A banner offers to turn them on; afterwards the name menu has Desktop notifications / Notification sound / Message previews toggles. These are per browser (localStorage); watched channels are per user (`channel_watches`).
+- Works only while the app is open in a tab or window. Notifications with the app closed need push, which comes with the desktop/mobile wrapper.

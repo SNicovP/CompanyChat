@@ -79,6 +79,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
         >
           <UIcon v-if="p.is_private" name="i-lucide-lock" class="size-3" />
           {{ p.name }}
+          <UIcon v-if="chat.watchedChannelIds.includes(p.id)" name="i-lucide-bell-ring" class="size-3 text-muted" title="Notifying for every message" />
           <span class="ml-auto flex gap-1">
             <UBadge v-if="chat.mentions[p.id]" size="sm" color="error" :title="`${chat.mentions[p.id]} mention(s) of you`">@{{ chat.mentions[p.id] }}</UBadge>
             <UBadge v-if="chat.unread[p.id]" size="sm">{{ chat.unread[p.id] }}</UBadge>
