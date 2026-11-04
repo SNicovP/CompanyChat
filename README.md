@@ -97,6 +97,26 @@ Hover your own message and click the pencil, or press Up in an empty composer to
 - A banner offers to turn them on; afterwards the name menu has Desktop notifications / Notification sound / Message previews toggles. These are per browser (localStorage); watched channels are per user (`channel_watches`).
 - Works only while the app is open in a tab or window. Notifications with the app closed need push, which comes with the desktop/mobile wrapper.
 
+## Deploying (Laravel Forge, static site)
+
+CompanyChat is a static SPA (`ssr: false`); all backend work is Supabase.
+
+1. In Forge create a site in **Static site** mode and connect this repo, branch `main`.
+2. Build command `npm run generate`, publish directory `.output/public`, Node 20+.
+3. Build-time environment variables (baked into the bundle, so use public values only):
+   `SUPABASE_URL` and `SUPABASE_KEY` (the anon/publishable key). Never put the service role key,
+   a `sb_secret_` key or the database password here.
+4. Enable quick deploy so merging to `main` updates the site.
+5. Unknown paths return the app's fallback page (with a 404 status), so refreshing on `/c/<id>` works.
+
+In Supabase:
+- Authentication, URL Configuration: set **Site URL** to the live URL and add `<live URL>/**` to Redirect URLs
+  (keep the localhost entry for local development).
+- `npx supabase secrets set SITE_URL=<live URL>` so invite links point at the live site.
+- Desktop notifications need HTTPS, which the live site has.
+
+Before inviting the whole office, set up **custom SMTP** (Authentication, SMTP Settings). Supabase's built-in
+email service is heavily rate-limited and only meant for testing.
 ## Search
 
 `Cmd/Ctrl+K` (or the sidebar button) searches messages. `search_messages(q, lim)` is a word-prefix full-text
