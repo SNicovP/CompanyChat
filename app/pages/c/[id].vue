@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { Database } from '~/types/database.types'
 
-type Attachment = Pick<Database['public']['Tables']['message_attachments']['Row'], 'id' | 'message_id' | 'path' | 'file_name' | 'mime_type' | 'size_bytes'>
+type Attachment = Pick<Database['public']['Tables']['message_attachments']['Row'], 'id' | 'message_id' | 'path' | 'file_name' | 'mime_type' | 'size_bytes' | 'deleted_at'>
 type Message = Pick<Database['public']['Tables']['messages']['Row'], 'id' | 'channel_id' | 'user_id' | 'body' | 'created_at' | 'edited_at'> & {
   message_attachments?: Attachment[]
 }
 
-const ATTACHMENT_COLUMNS = 'id, message_id, path, file_name, mime_type, size_bytes'
+const ATTACHMENT_COLUMNS = 'id, message_id, path, file_name, mime_type, size_bytes, deleted_at'
 const MESSAGE_COLUMNS = `id, channel_id, user_id, body, created_at, edited_at, message_attachments(${ATTACHMENT_COLUMNS})`
 const PAGE_SIZE = 100
 
@@ -83,6 +83,13 @@ function subscribe(id: string) {
       const list = m.message_attachments ?? []
       if (!list.some((x) => x.id === a.id)) m.message_attachments = [...list, a]
       scrollToBottom()
+    })
+    // Deleting one attachment flags its row, so everyone sees the "Attachment deleted" tag.
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_attachments', filter: `channel_id=eq.${id}` }, (payload) => {
+      const a = payload.new as Attachment
+      const m = messages.value.find((x) => x.id === a.message_id)
+      const i = m?.message_attachments?.findIndex((x) => x.id === a.id) ?? -1
+      if (m?.message_attachments && i >= 0) m.message_attachments[i] = { ...m.message_attachments[i]!, deleted_at: a.deleted_at }
     })
     // DELETE events only carry the primary key, so they cannot be filtered by channel.
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
@@ -220,8 +227,26 @@ function onEnter(e: KeyboardEvent) {
   send()
 }
 
+const canDeleteAttachment = (m: Message) => m.user_id === chat.myId || chat.canManageChannel(channel.value)
+
+async function removeAttachment(m: Message, a: Pick<Attachment, 'id' | 'path' | 'file_name'>) {
+  if (!confirm(`Delete ${a.file_name}? The message stays, and the file is removed for everyone.`)) return
+  const { error: fileError } = await supabase.storage.from('attachments').remove([a.path])
+  if (fileError) {
+    toast.add({ title: 'Could not delete attachment', description: errorMessage(fileError), color: 'error' })
+    return
+  }
+  const { error } = await supabase.from('message_attachments').update({ deleted_at: new Date().toISOString() }).eq('id', a.id)
+  if (error) {
+    toast.add({ title: 'Could not delete attachment', description: errorMessage(error), color: 'error' })
+    return
+  }
+  const target = m.message_attachments?.find((x) => x.id === a.id)
+  if (target) target.deleted_at = new Date().toISOString()
+}
+
 async function remove(m: Message) {
-  const paths = (m.message_attachments ?? []).map((a) => a.path)
+  const paths = (m.message_attachments ?? []).filter((a) => !a.deleted_at).map((a) => a.path)
   if (paths.length) await supabase.storage.from('attachments').remove(paths) // best effort
   const { error } = await supabase.from('messages').delete().eq('id', m.id)
   if (error) toast.add({ title: 'Could not delete', description: error.message, color: 'error' })
@@ -274,7 +299,12 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             />
           </div>
           <p v-if="m.body" class="whitespace-pre-wrap break-words">{{ m.body }}</p>
-          <MessageAttachments v-if="m.message_attachments?.length" :attachments="m.message_attachments" />
+          <MessageAttachments
+            v-if="m.message_attachments?.length"
+            :attachments="m.message_attachments"
+            :can-delete="canDeleteAttachment(m)"
+            @delete="(a) => removeAttachment(m, a)"
+          />
         </div>
       </div>
 

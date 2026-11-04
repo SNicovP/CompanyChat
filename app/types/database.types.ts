@@ -190,6 +190,7 @@ export type Database = {
         Row: {
           channel_id: string
           created_at: string
+          deleted_at: string | null
           file_name: string
           id: string
           message_id: string
@@ -200,6 +201,7 @@ export type Database = {
         Insert: {
           channel_id: string
           created_at?: string
+          deleted_at?: string | null
           file_name: string
           id?: string
           message_id: string
@@ -210,6 +212,7 @@ export type Database = {
         Update: {
           channel_id?: string
           created_at?: string
+          deleted_at?: string | null
           file_name?: string
           id?: string
           message_id?: string

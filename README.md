@@ -81,4 +81,4 @@ In the Supabase dashboard (Authentication > URL Configuration) add `<SITE_URL>/*
 - Attach with the paperclip, paste an image, or drop files onto the composer (up to 5 files, 10 MB each).
 - Files go to the private `attachments` storage bucket at `<channel_id>/<message_id>/<n>_<name>`; `message_attachments` records them. Storage policies mirror channel access: only the message author uploads into their message's folder, channel members read, the uploader or a project manager deletes.
 - Viewed through signed URLs (6 hours). PNG/JPEG/GIF/WebP show inline; everything else (including SVG) downloads.
-- Deleting a message removes its files (best effort from the app). Files orphaned by a failed delete can be cleaned up later from the Storage page.
+- Deleting one attachment (the x on hover; the author or a project manager) removes the file but keeps the message, which then shows an "Attachment deleted" tag. Deleting the whole message removes its files too (best effort from the app). Files orphaned by a failed delete can be cleaned up later from the Storage page.

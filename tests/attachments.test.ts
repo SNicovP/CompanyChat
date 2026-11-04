@@ -81,6 +81,42 @@ describe('attachment files (storage policies)', () => {
   })
 })
 
+describe('deleting a single attachment', () => {
+  let attachmentId: string
+
+  beforeEach(async () => {
+    await attach(bob, bobMsg, site, `${site}/${bobMsg}/a.png`)
+    attachmentId = await one('select id from message_attachments')
+  })
+
+  const flag = (user: string) =>
+    asUser(db, user, () => db.query('update message_attachments set deleted_at = now() where id = $1', [attachmentId]))
+
+  it('lets the author flag it as deleted while the message stays', async () => {
+    expect((await flag(bob)).affectedRows).toBe(1)
+    const { rows } = await db.query<{ deleted_at: string | null }>('select deleted_at from message_attachments')
+    expect(rows[0]!.deleted_at).not.toBeNull()
+    expect((await db.query('select id from messages where id = $1', [bobMsg])).rows).toHaveLength(1)
+  })
+
+  it('lets a project manager do it, but not other members or outsiders', async () => {
+    expect((await flag(alice)).affectedRows).toBe(1)
+    await db.query('update message_attachments set deleted_at = null')
+    await db.query(`insert into client_members (client_id, user_id) select client_id, $1 from channels where id = $2`, [carol, site])
+    expect((await flag(carol)).affectedRows).toBe(0) // plain client member, not the author
+    const outsider = await addUser(db, 'dave')
+    expect((await flag(outsider)).affectedRows).toBe(0)
+  })
+
+  it('cannot be undone or used to change other columns', async () => {
+    await flag(bob)
+    await asUser(db, bob, async () => {
+      await expect(db.query('update message_attachments set deleted_at = null')).rejects.toThrow(/row-level security/)
+      await expect(db.query(`update message_attachments set file_name = 'x'`)).rejects.toThrow(/permission denied/)
+    })
+  })
+})
+
 describe('attachment records', () => {
   it('lets the author attach, and channel members read, but not outsiders', async () => {
     await attach(bob, bobMsg, site, `${site}/${bobMsg}/a.png`)
