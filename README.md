@@ -61,3 +61,18 @@ truncate public.messages, public.channel_members, public.channels, public.client
 - Read markers live in `channel_reads` and are only reachable through `mark_channel_read` / `get_unread_counts`.
 - Opening (or focusing) a channel marks it read; new messages in other channels bump a sidebar badge and the browser tab title.
 - A project you have never seen starts as "read now" so old history isn't flagged; a new DM counts from its first message.
+
+## Inviting and deactivating users
+Both need the service role key, so they run in a Supabase Edge Function (`supabase/functions/admin-users`), never in the browser. The authorization rules live in `supabase/functions/_shared/policy.ts` (unit tested).
+
+One-time setup:
+```bash
+npx supabase db push
+npx supabase secrets set SITE_URL=http://localhost:3000   # your real app URL once deployed
+npx supabase functions deploy admin-users --use-api
+```
+In the Supabase dashboard (Authentication > URL Configuration) add `<SITE_URL>/**` to the Redirect URLs, and check Authentication > Emails if you want to customise the invite email.
+
+- Invite: Admin > Users > "Invite someone". They get an email, choose a password at `/set-password`, and appear in the list.
+- Deactivate: bans the auth user (no sign-in or token refresh) and flips `profiles.is_active`; restrictive RLS policies cut off any session that is still valid. History is kept. Reactivate reverses it. Admins can deactivate members; only the owner can deactivate admins; nobody can deactivate the owner or themselves.
+- Supabase's built-in email sender is rate-limited; configure custom SMTP before inviting many people.

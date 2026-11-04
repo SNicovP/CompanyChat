@@ -241,3 +241,39 @@ describe('direct messages', () => {
     })
   })
 })
+
+describe('deactivated users', () => {
+  it('see and change nothing, even with a still-valid session, until reactivated', async () => {
+    const acme = await createClient('Acme')
+    await db.query(`insert into client_members (client_id, user_id) values ($1, $2)`, [acme, bob])
+    const site = await createProject(acme, 'website')
+    await asUser(db, bob, () => db.query(`insert into messages (channel_id, body) values ($1, 'before')`, [site]))
+
+    await db.query(`update profiles set is_active = false where id = $1`, [bob])
+    await asUser(db, bob, async () => {
+      expect((await db.query('select id from clients')).rows).toHaveLength(0)
+      expect((await db.query('select id from channels')).rows).toHaveLength(0)
+      expect((await db.query('select id from messages')).rows).toHaveLength(0)
+      expect((await db.query('select id from profiles')).rows).toHaveLength(0)
+      await expect(db.query(`insert into messages (channel_id, body) values ($1, 'after')`, [site])).rejects.toThrow(/row-level security/)
+      await expect(db.query('select get_or_create_dm($1)', [alice])).rejects.toThrow(/deactivated/)
+    })
+
+    // others cannot DM a deactivated user, and active users are unaffected
+    await asUser(db, alice, async () => {
+      await expect(db.query('select get_or_create_dm($1)', [bob])).rejects.toThrow(/unknown user/)
+    })
+
+    await db.query(`update profiles set is_active = true where id = $1`, [bob])
+    await asUser(db, bob, async () => {
+      expect((await db.query('select id from messages')).rows).toHaveLength(1)
+    })
+  })
+
+  it('cannot reactivate themselves', async () => {
+    await db.query(`update profiles set is_active = false where id = $1`, [bob])
+    await asUser(db, bob, async () => {
+      await expect(db.query(`update profiles set is_active = true where id = $1`, [bob])).rejects.toThrow(/permission denied/)
+    })
+  })
+})
