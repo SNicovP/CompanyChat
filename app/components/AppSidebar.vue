@@ -8,6 +8,17 @@ const newClientOpen = ref(false)
 const newProjectFor = ref<string | null>(null)
 const newProjectOpen = ref(false)
 const dmOpen = ref(false)
+const searchOpen = ref(false)
+
+// Cmd/Ctrl+K opens search from anywhere.
+function onKey(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    searchOpen.value = true
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 const activeId = computed(() => String(route.params.id ?? ''))
 
@@ -59,6 +70,11 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
 
 <template>
   <aside class="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-default p-3">
+    <UButton icon="i-lucide-search" color="neutral" variant="subtle" block class="justify-start" @click="searchOpen = true">
+      <span class="text-muted">Search messages</span>
+      <UKbd class="ml-auto" value="meta" /><UKbd value="K" />
+    </UButton>
+
     <section>
       <div class="mb-1 flex items-center justify-between px-2 text-xs font-semibold uppercase text-muted">
         Clients
@@ -109,6 +125,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
       </NuxtLink>
     </section>
 
+    <SearchModal v-model:open="searchOpen" />
     <NameModal v-model:open="newClientOpen" title="New client" label="Client name" @submit="onNewClient" />
     <NameModal v-model:open="newProjectOpen" title="New project" label="Project name" with-private @submit="onNewProject" />
 
