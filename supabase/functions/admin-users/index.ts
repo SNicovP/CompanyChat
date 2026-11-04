@@ -25,7 +25,12 @@ Deno.serve(async (req) => {
   if (userError || !userData.user) return json(401, { error: 'Not signed in.' })
 
   const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const { data: actorProfile } = await admin.from('profiles').select('id, app_role, is_active').eq('id', userData.user.id).single()
+  const { data: actorProfile, error: actorError } = await admin
+    .from('profiles')
+    .select('id, app_role, is_active')
+    .eq('id', userData.user.id)
+    .maybeSingle()
+  if (actorError) return json(500, { error: `Could not check your account: ${actorError.message}` })
   if (!actorProfile?.is_active) return json(403, { error: 'Your account is not active.' })
   const actor = { id: actorProfile.id as string, role: actorProfile.app_role as AppRole }
 
@@ -56,7 +61,8 @@ Deno.serve(async (req) => {
 
   if (body.action === 'deactivate' || body.action === 'reactivate') {
     const targetId = typeof body.user_id === 'string' ? body.user_id : ''
-    const { data: target } = await admin.from('profiles').select('id, app_role').eq('id', targetId).maybeSingle()
+    const { data: target, error: targetError } = await admin.from('profiles').select('id, app_role').eq('id', targetId).maybeSingle()
+    if (targetError) return json(500, { error: `Could not look up that user: ${targetError.message}` })
     if (!target) return json(404, { error: 'User not found.' })
 
     const allowed = canChangeActive(actor, { id: target.id as string, role: target.app_role as AppRole })

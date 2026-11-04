@@ -277,3 +277,18 @@ describe('deactivated users', () => {
     })
   })
 })
+
+describe('service_role (admin-users Edge Function)', () => {
+  it('can read and flag profiles, which needs explicit grants', async () => {
+    await db.exec('set role service_role')
+    try {
+      const { rows } = await db.query<{ is_active: boolean }>('select is_active from profiles where id = $1', [bob])
+      expect(rows[0]!.is_active).toBe(true)
+      await db.query('update profiles set is_active = false where id = $1', [bob])
+    } finally {
+      await db.exec('reset role')
+    }
+    const { rows } = await db.query<{ is_active: boolean }>('select is_active from profiles where id = $1', [bob])
+    expect(rows[0]!.is_active).toBe(false)
+  })
+})
