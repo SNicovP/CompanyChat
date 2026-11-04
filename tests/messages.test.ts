@@ -43,6 +43,13 @@ describe('messages', () => {
     expect(rows[0]!.user_id).toBe(bob)
   })
 
+  it('returns the new message to its author (insert ... returning)', async () => {
+    const rows = await asUser(db, bob, async () =>
+      (await db.query(`insert into messages (channel_id, body) values ($1, 'hi') returning id, body`, [site])).rows,
+    )
+    expect(rows).toHaveLength(1)
+  })
+
   it('stops outsiders reading or posting', async () => {
     await post(bob, site, 'internal')
     expect(await readBodies(carol, site)).toEqual([])

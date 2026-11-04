@@ -14,7 +14,9 @@ const dmOpen = ref(false)
 const activeId = computed(() => String(route.params.id ?? ''))
 
 function fail(title: string, e: unknown) {
-  toast.add({ title, description: e instanceof Error ? e.message : String(e), color: 'error' })
+  // Supabase errors are plain objects with a `message`, not Error instances.
+  const message = typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)
+  toast.add({ title, description: message, color: 'error' })
 }
 
 async function onNewClient(name: string) {
