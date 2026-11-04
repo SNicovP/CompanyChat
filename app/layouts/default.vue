@@ -6,6 +6,7 @@ const store = useProfileStore()
 const chat = useChatStore()
 const user = useSupabaseUser()
 const toast = useToast()
+const notifier = useNotifier()
 
 useHead({
   title: computed(() => {
@@ -32,11 +33,32 @@ watch(
   { immediate: true },
 )
 
+async function toggleNotifications() {
+  if (notifier.permission.value === 'granted') return notifier.set('enabled', !notifier.prefs.value.enabled)
+  const result = await notifier.request()
+  if (result === 'denied') {
+    toast.add({
+      title: 'Notifications are blocked',
+      description: 'Allow notifications for this site in your browser settings, then try again.',
+      color: 'warning',
+    })
+  }
+}
+
+const onOff = (v: boolean) => (v ? 'On' : 'Off')
+
 const items = computed(() => [
   STATUS_OPTIONS.map((s) => ({
     label: s.label,
     onSelect: () => store.setStatus(s.value).catch(() => toast.add({ title: 'Could not update status', color: 'error' })),
   })),
+  ...(notifier.supported.value
+    ? [[
+        { label: `Desktop notifications: ${onOff(notifier.active.value)}`, icon: 'i-lucide-bell', onSelect: toggleNotifications },
+        { label: `Notification sound: ${onOff(notifier.prefs.value.sound)}`, icon: 'i-lucide-volume-2', onSelect: () => notifier.set('sound', !notifier.prefs.value.sound) },
+        { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: () => notifier.set('preview', !notifier.prefs.value.preview) },
+      ]]
+    : []),
   ...(store.isAdmin ? [[{ label: 'Manage users', icon: 'i-lucide-shield', to: '/admin/users' }]] : []),
   [{
     label: 'Sign out',
@@ -62,6 +84,13 @@ const items = computed(() => [
         </UButton>
       </UDropdownMenu>
     </header>
+    <div v-if="notifier.canAsk.value" class="flex items-center justify-between gap-3 border-b border-default bg-elevated px-4 py-2 text-sm">
+      <span>Get desktop notifications for direct messages and @mentions?</span>
+      <span class="flex gap-2">
+        <UButton size="xs" @click="toggleNotifications">Turn on</UButton>
+        <UButton size="xs" color="neutral" variant="ghost" @click="notifier.set('dismissed', true)">Not now</UButton>
+      </span>
+    </div>
     <div class="flex min-h-0 flex-1">
       <AppSidebar />
       <main class="min-w-0 flex-1"><slot /></main>
