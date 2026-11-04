@@ -76,3 +76,9 @@ In the Supabase dashboard (Authentication > URL Configuration) add `<SITE_URL>/*
 - Invite: Admin > Users > "Invite someone". They get an email, choose a password at `/set-password`, and appear in the list.
 - Deactivate: bans the auth user (no sign-in or token refresh) and flips `profiles.is_active`; restrictive RLS policies cut off any session that is still valid. History is kept. Reactivate reverses it. Admins can deactivate members; only the owner can deactivate admins; nobody can deactivate the owner or themselves.
 - Supabase's built-in email sender is rate-limited; configure custom SMTP before inviting many people.
+
+## Attachments
+- Attach with the paperclip, paste an image, or drop files onto the composer (up to 5 files, 10 MB each).
+- Files go to the private `attachments` storage bucket at `<channel_id>/<message_id>/<n>_<name>`; `message_attachments` records them. Storage policies mirror channel access: only the message author uploads into their message's folder, channel members read, the uploader or a project manager deletes.
+- Viewed through signed URLs (6 hours). PNG/JPEG/GIF/WebP show inline; everything else (including SVG) downloads.
+- Deleting a message removes its files (best effort from the app). Files orphaned by a failed delete can be cleaned up later from the Storage page.

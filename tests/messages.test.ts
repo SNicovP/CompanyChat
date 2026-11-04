@@ -75,8 +75,7 @@ describe('messages', () => {
     })
   })
 
-  it('rejects empty and oversized messages', async () => {
-    await expect(post(bob, site, '   ')).rejects.toThrow(/check constraint/)
+  it('rejects oversized messages', async () => {
     await expect(post(bob, site, 'x'.repeat(4001))).rejects.toThrow(/check constraint/)
   })
 
