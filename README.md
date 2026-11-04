@@ -36,3 +36,14 @@ Requires Node ^22.21 || ^24.11 || >=26 (Nuxt 4).
 
 ## Tests
 `npm test` runs the RLS policies against an in-process Postgres (PGlite), no Docker needed.
+
+## Messaging
+- Sidebar lists the clients you belong to with their projects, plus your DMs. Admins create clients and projects; a client's managers create projects for it.
+- Messages load the latest 100 and update live (Supabase Realtime, subject to the same RLS as reads). Authors can edit/delete their own; project managers can delete any message in their project.
+
+## Resetting for go-live
+Wipe test content but keep the schema and users:
+```sql
+truncate public.messages, public.channel_members, public.channels, public.client_members, public.clients cascade;
+```
+`npx supabase db reset --linked` also deletes users; the first user created afterwards becomes the owner again.

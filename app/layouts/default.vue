@@ -3,10 +3,19 @@ import { STATUS_OPTIONS, statusMeta } from '~/utils/status'
 
 const supabase = useSupabaseClient()
 const store = useProfileStore()
+const chat = useChatStore()
 const user = useSupabaseUser()
 const toast = useToast()
 
-watch(user, () => store.load().catch(() => {}), { immediate: true })
+watch(
+  user,
+  (u) => {
+    if (!u) return
+    store.load().catch(() => {})
+    chat.load().catch((e) => toast.add({ title: 'Could not load chats', description: String(e?.message ?? e), color: 'error' }))
+  },
+  { immediate: true },
+)
 
 const items = computed(() => [
   STATUS_OPTIONS.map((s) => ({
@@ -19,6 +28,7 @@ const items = computed(() => [
     onSelect: async () => {
       await supabase.auth.signOut()
       store.profile = null
+      chat.reset()
       await navigateTo('/login')
     },
   }],
@@ -26,9 +36,9 @@ const items = computed(() => [
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col">
+  <div class="flex h-screen flex-col">
     <header class="flex items-center justify-between border-b border-default px-4 py-2">
-      <span class="font-semibold">CompanyChat</span>
+      <NuxtLink to="/" class="font-semibold">CompanyChat</NuxtLink>
       <UDropdownMenu v-if="store.profile" :items="items">
         <UButton color="neutral" variant="ghost">
           <span class="inline-block size-2.5 rounded-full" :class="statusMeta(store.profile.status).color" />
@@ -36,6 +46,9 @@ const items = computed(() => [
         </UButton>
       </UDropdownMenu>
     </header>
-    <main class="flex-1"><slot /></main>
+    <div class="flex min-h-0 flex-1">
+      <AppSidebar />
+      <main class="min-w-0 flex-1"><slot /></main>
+    </div>
   </div>
 </template>
