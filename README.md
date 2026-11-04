@@ -123,4 +123,4 @@ email service is heavily rate-limited and only meant for testing.
 search (`simple` config, all words must match, newest first, max 100) over a generated `body_tsv` column with a GIN index.
 It is `SECURITY INVOKER`, so the existing messages RLS decides what each person can find: private channels you are
 not in and other people's DMs never appear. Mention tokens are excluded from the index. Clicking a result opens
-the channel (it does not yet scroll to the message).
+the channel at `?m=<message id>`, scrolls to that message (loading older history if needed) and highlights it for a few seconds.

@@ -61,7 +61,7 @@ const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
 
 async function go(h: Hit) {
   open.value = false
-  await navigateTo(`/c/${h.channel_id}`)
+  await navigateTo({ path: `/c/${h.channel_id}`, query: { m: h.id } })
 }
 </script>
 
