@@ -73,24 +73,31 @@ export function useNotifier() {
   const canAsk = computed(() => permission.value === 'default' && !prefs.value.dismissed)
   const active = computed(() => prefs.value.enabled && permission.value === 'granted')
 
-  function show(opts: { channelId: string; title: string; body: string }) {
-    if (!active.value) return
+  /** Show a notification. Returns an error message if the browser refused (for the test button). */
+  function show(opts: { channelId: string; title: string; body: string; url?: string; forcePreview?: boolean }): string | null {
+    if (!active.value) return 'Notifications are switched off or not allowed for this site.'
     try {
       const n = new Notification(opts.title, {
-        body: prefs.value.preview ? opts.body : 'New message',
+        body: prefs.value.preview || opts.forcePreview ? opts.body : 'New message',
         tag: opts.channelId, // a newer message in the same channel replaces the older one
         silent: true, // we play our own sound so it can be switched off
       })
       n.onclick = () => {
         window.focus()
-        navigateTo(`/c/${opts.channelId}`)
+        navigateTo(opts.url ?? `/c/${opts.channelId}`)
         n.close()
       }
-    } catch {
-      return // some browsers only allow notifications through a service worker
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e) // some browsers only allow notifications via a service worker
     }
     if (prefs.value.sound) beep()
+    return null
   }
 
-  return { prefs, permission, supported, canAsk, active, set, request, show }
+  /** Fire a sample notification right now, regardless of focus, to check the whole chain. */
+  function test(): string | null {
+    return show({ channelId: 'test', title: 'CompanyChat', body: 'This is a test notification.', url: '/', forcePreview: true })
+  }
+
+  return { prefs, permission, supported, canAsk, active, set, request, show, test }
 }
