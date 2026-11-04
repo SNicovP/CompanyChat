@@ -96,3 +96,11 @@ Hover your own message and click the pencil, or press Up in an empty composer to
 - Browser notifications (plus an optional short sound) while the window is in the background. Direct messages and @mentions always notify; other project messages only for channels you "watch" (bell button in the channel header). Nothing is sent for your own messages, while the window is focused, or while your status is Do not disturb.
 - A banner offers to turn them on; afterwards the name menu has Desktop notifications / Notification sound / Message previews toggles. These are per browser (localStorage); watched channels are per user (`channel_watches`).
 - Works only while the app is open in a tab or window. Notifications with the app closed need push, which comes with the desktop/mobile wrapper.
+
+## Search
+
+`Cmd/Ctrl+K` (or the sidebar button) searches messages. `search_messages(q, lim)` is a word-prefix full-text
+search (`simple` config, all words must match, newest first, max 100) over a generated `body_tsv` column with a GIN index.
+It is `SECURITY INVOKER`, so the existing messages RLS decides what each person can find: private channels you are
+not in and other people's DMs never appear. Mention tokens are excluded from the index. Clicking a result opens
+the channel (it does not yet scroll to the message).
