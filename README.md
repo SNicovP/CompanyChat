@@ -56,3 +56,8 @@ truncate public.messages, public.channel_members, public.channels, public.client
 ## Presence
 - Connected users are tracked with Supabase Realtime Presence; anyone not connected shows grey/Offline, connected users show their manual status (Online/Away/Busy/Do not disturb).
 - Status changes reach other users live (profiles are in the realtime publication).
+
+## Unread counts
+- Read markers live in `channel_reads` and are only reachable through `mark_channel_read` / `get_unread_counts`.
+- Opening (or focusing) a channel marks it read; new messages in other channels bump a sidebar badge and the browser tab title.
+- A project you have never seen starts as "read now" so old history isn't flagged; a new DM counts from its first message.

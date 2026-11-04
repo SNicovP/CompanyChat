@@ -267,9 +267,14 @@ export type Database = {
       can_manage_channel: { Args: { chid: string }; Returns: boolean }
       can_manage_client: { Args: { cid: string }; Returns: boolean }
       get_or_create_dm: { Args: { other_user: string }; Returns: string }
+      get_unread_counts: {
+        Args: never
+        Returns: { chan_id: string; unread: number }[]
+      }
       is_app_admin: { Args: never; Returns: boolean }
       is_channel_member: { Args: { chid: string }; Returns: boolean }
       is_client_member: { Args: { cid: string }; Returns: boolean }
+      mark_channel_read: { Args: { chid: string }; Returns: undefined }
       set_app_role: {
         Args: {
           new_role: Database["public"]["Enums"]["app_role"]
