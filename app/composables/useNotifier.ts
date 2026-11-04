@@ -81,7 +81,9 @@ export function useNotifier() {
         body: prefs.value.preview || opts.forcePreview ? opts.body : 'New message',
         tag: opts.channelId, // a newer message in the same channel replaces the older one
         silent: true, // we play our own sound so it can be switched off
-      })
+        // Without this a notification that replaces an earlier one with the same tag is shown silently.
+        renotify: true,
+      } as NotificationOptions)
       n.onclick = () => {
         window.focus()
         navigateTo(opts.url ?? `/c/${opts.channelId}`)
