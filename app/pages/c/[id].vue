@@ -27,6 +27,8 @@ const membersOpen = ref(false)
 const files = ref<File[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
+const editingId = ref<string | null>(null)
+const editDraft = ref('')
 
 function sortMessages() {
   messages.value.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
@@ -221,6 +223,57 @@ async function send() {
   scrollToBottom()
 }
 
+function startEdit(m: Message) {
+  editingId.value = m.id
+  editDraft.value = m.body
+}
+
+function cancelEdit() {
+  editingId.value = null
+  editDraft.value = ''
+}
+
+async function saveEdit(m: Message) {
+  const check = checkEdit(editDraft.value, m.body, (m.message_attachments ?? []).some((a) => !a.deleted_at))
+  if (check.action === 'cancel') return cancelEdit()
+  if (check.action === 'reject') {
+    toast.add({ title: 'Message not changed', description: check.reason, color: 'warning' })
+    return
+  }
+  const { data, error } = await supabase
+    .from('messages')
+    .update({ body: check.body })
+    .eq('id', m.id)
+    .select('id, body, edited_at')
+    .maybeSingle()
+  if (error) {
+    toast.add({ title: 'Could not save the edit', description: errorMessage(error), color: 'error' })
+    return
+  }
+  if (!data) {
+    toast.add({ title: 'Could not save the edit', description: 'You can no longer edit this message.', color: 'error' })
+    return cancelEdit()
+  }
+  m.body = data.body
+  m.edited_at = data.edited_at
+  cancelEdit()
+}
+
+function onEditEnter(m: Message, e: KeyboardEvent) {
+  if (e.shiftKey) return // newline
+  e.preventDefault()
+  saveEdit(m)
+}
+
+/** Up arrow in an empty composer edits your most recent message, like Slack. */
+function onArrowUp(e: KeyboardEvent) {
+  if (draft.value || files.value.length || editingId.value) return
+  const mine = [...messages.value].reverse().find((m) => m.user_id === chat.myId)
+  if (!mine) return
+  e.preventDefault()
+  startEdit(mine)
+}
+
 function onEnter(e: KeyboardEvent) {
   if (e.shiftKey) return // newline
   e.preventDefault()
@@ -289,16 +342,43 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             <span class="text-xs text-muted">{{ time(m.created_at) }}<span v-if="m.edited_at"> (edited)</span></span>
             <UButton
               v-if="m.user_id === chat.myId"
-              icon="i-lucide-trash-2"
+              icon="i-lucide-pencil"
               size="xs"
               color="neutral"
               variant="ghost"
               class="ml-auto opacity-0 group-hover:opacity-100"
+              aria-label="Edit message"
+              @click="startEdit(m)"
+            />
+            <UButton
+              v-if="m.user_id === chat.myId"
+              icon="i-lucide-trash-2"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              class="opacity-0 group-hover:opacity-100"
               aria-label="Delete message"
               @click="remove(m)"
             />
           </div>
-          <p v-if="m.body" class="whitespace-pre-wrap break-words">{{ m.body }}</p>
+          <div v-if="editingId === m.id" class="mt-1">
+            <UTextarea
+              v-model="editDraft"
+              autoresize
+              :maxrows="8"
+              maxlength="4000"
+              autofocus
+              class="w-full"
+              @keydown.enter="onEditEnter(m, $event)"
+              @keydown.esc="cancelEdit"
+            />
+            <div class="mt-1 flex items-center gap-2 text-xs text-muted">
+              <UButton size="xs" @click="saveEdit(m)">Save</UButton>
+              <UButton size="xs" color="neutral" variant="ghost" @click="cancelEdit">Cancel</UButton>
+              Enter to save, Esc to cancel
+            </div>
+          </div>
+          <p v-else-if="m.body" class="whitespace-pre-wrap break-words">{{ m.body }}</p>
           <MessageAttachments
             v-if="m.message_attachments?.length"
             :attachments="m.message_attachments"
@@ -337,6 +417,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             class="flex-1"
             :disabled="sending"
             @keydown.enter="onEnter"
+            @keydown.up="onArrowUp"
             @paste="onPaste"
           />
         </div>
