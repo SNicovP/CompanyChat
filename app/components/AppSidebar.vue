@@ -76,8 +76,8 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
     </UButton>
 
     <section>
-      <div class="flex items-center justify-between border-b border-accented px-2 pb-1.5 text-xs font-semibold uppercase tracking-wider text-dimmed">
-        Clients &amp; projects
+      <div class="flex items-center justify-between rounded-md bg-accented/50 py-1 pl-2.5 pr-1 text-xs font-bold uppercase tracking-wider text-highlighted">
+        <span class="flex items-center gap-2"><UIcon name="i-lucide-briefcase" class="size-4 text-primary" />Clients &amp; projects</span>
         <UButton v-if="canCreateClient" icon="i-lucide-plus" size="xs" color="neutral" variant="ghost" aria-label="New client" @click="newClientOpen = true" />
       </div>
       <p v-if="chat.loaded && !chat.clients.length" class="px-2 pt-2 text-sm text-muted">No clients yet.</p>
@@ -108,8 +108,8 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
     </section>
 
     <section>
-      <div class="flex items-center justify-between border-b border-accented px-2 pb-1.5 text-xs font-semibold uppercase tracking-wider text-dimmed">
-        Direct messages
+      <div class="flex items-center justify-between rounded-md bg-accented/50 py-1 pl-2.5 pr-1 text-xs font-bold uppercase tracking-wider text-highlighted">
+        <span class="flex items-center gap-2"><UIcon name="i-lucide-messages-square" class="size-4 text-primary" />Direct messages</span>
         <UButton icon="i-lucide-plus" size="xs" color="neutral" variant="ghost" aria-label="New message" @click="dmOpen = true" />
       </div>
       <div class="mt-2 space-y-0.5">
