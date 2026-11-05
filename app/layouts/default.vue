@@ -8,6 +8,7 @@ const user = useSupabaseUser()
 const toast = useToast()
 const notifier = useNotifier()
 const installer = useInstallPrompt()
+const push = usePush()
 
 useHead({
   title: computed(() => {
@@ -29,6 +30,7 @@ watch(
       }
     })
     chat.start()
+    push.sync()
     chat.load().catch((e) => toast.add({ title: 'Could not load chats', description: String(e?.message ?? e), color: 'error' }))
   },
   { immediate: true },
@@ -47,6 +49,21 @@ async function toggleNotifications() {
 }
 
 const onOff = (v: boolean) => (v ? 'On' : 'Off')
+
+async function togglePush() {
+  try {
+    if (push.active.value) await push.disable()
+    else await push.enable()
+    toast.add({ title: push.active.value ? 'Background notifications are on for this device' : 'Background notifications are off for this device' })
+  } catch (e) {
+    toast.add({ title: 'Could not change background notifications', description: errorMessage(e), color: 'error' })
+  }
+}
+
+function togglePreview() {
+  notifier.set('preview', !notifier.prefs.value.preview)
+  push.syncPreview()
+}
 
 function notificationState() {
   if (notifier.permission.value === 'denied') return 'Blocked in browser'
@@ -84,8 +101,9 @@ const items = computed(() => [
     ? [[
         { label: `Desktop notifications: ${notificationState()}`, icon: 'i-lucide-bell', onSelect: toggleNotifications },
         { label: 'Send a test notification', icon: 'i-lucide-bell-ring', onSelect: sendTest },
+        ...(push.supported.value ? [{ label: `Notify when the app is closed: ${onOff(push.active.value)}`, icon: 'i-lucide-bell-dot', onSelect: togglePush }] : []),
         { label: `Notification sound: ${onOff(notifier.prefs.value.sound)}`, icon: 'i-lucide-volume-2', onSelect: () => notifier.set('sound', !notifier.prefs.value.sound) },
-        { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: () => notifier.set('preview', !notifier.prefs.value.preview) },
+        { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: togglePreview },
       ]]
     : []),
   ...(installer.canInstall.value ? [[{ label: 'Install app', icon: 'i-lucide-download', onSelect: installer.install }]] : []),
@@ -94,6 +112,7 @@ const items = computed(() => [
     label: 'Sign out',
     icon: 'i-lucide-log-out',
     onSelect: async () => {
+      await push.forget().catch(() => {}) // before signing out, while we can still authenticate
       await supabase.auth.signOut()
       store.profile = null
       chat.reset()

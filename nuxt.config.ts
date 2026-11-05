@@ -26,6 +26,13 @@ export default defineNuxtConfig({
     },
   },
 
+  runtimeConfig: {
+    public: {
+      // Public Web Push (VAPID) key; set NUXT_PUBLIC_VAPID_PUBLIC_KEY at build time. Empty hides background notifications.
+      vapidPublicKey: '',
+    },
+  },
+
   supabase: {
     redirectOptions: {
       login: '/login',

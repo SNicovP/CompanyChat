@@ -63,6 +63,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const profileStore = useProfileStore()
   const notifier = useNotifier()
+  const push = usePush()
 
   // UI hints only: RLS is what actually enforces these.
   const canManageClient = (clientId: string) => profileStore.isAdmin || managedClientIds.value.includes(clientId)
@@ -163,6 +164,11 @@ export const useChatStore = defineStore('chat', () => {
     })
     console.debug('[notify]', decision.notify ? 'showing' : 'skipped', '-', decision.reason)
     if (!decision.notify) return
+    if (push.active.value) {
+      // The service worker shows the notification (also when this tab is open but not focused); don't double up.
+      notifier.chime()
+      return
+    }
     const text = notificationText({
       kind: channel.kind,
       senderName: userName(m.user_id),
