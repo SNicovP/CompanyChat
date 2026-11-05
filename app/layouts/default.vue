@@ -7,6 +7,7 @@ const chat = useChatStore()
 const user = useSupabaseUser()
 const toast = useToast()
 const notifier = useNotifier()
+const installer = useInstallPrompt()
 
 useHead({
   title: computed(() => {
@@ -87,6 +88,7 @@ const items = computed(() => [
         { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: () => notifier.set('preview', !notifier.prefs.value.preview) },
       ]]
     : []),
+  ...(installer.canInstall.value ? [[{ label: 'Install app', icon: 'i-lucide-download', onSelect: installer.install }]] : []),
   ...(store.isAdmin ? [[{ label: 'Manage users', icon: 'i-lucide-shield', to: '/admin/users' }]] : []),
   [{
     label: 'Sign out',
