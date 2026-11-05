@@ -124,8 +124,11 @@ const items = computed(() => [
 
 <template>
   <div class="flex h-screen flex-col">
-    <header class="flex items-center justify-between border-b border-default px-4 py-2">
-      <NuxtLink to="/" class="font-semibold">CompanyChat</NuxtLink>
+    <header class="flex items-center justify-between border-b border-accented bg-default px-4 py-2">
+      <NuxtLink to="/" class="flex items-center gap-2 font-semibold text-highlighted">
+        <span class="inline-flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary"><UIcon name="i-lucide-message-square-text" class="size-4" /></span>
+        CompanyChat
+      </NuxtLink>
       <UDropdownMenu v-if="store.profile" :items="items">
         <UButton color="neutral" variant="ghost">
           <StatusDot :status="effectiveStatus(store.profile.status, true)" />
@@ -142,7 +145,7 @@ const items = computed(() => [
     </div>
     <div class="flex min-h-0 flex-1">
       <AppSidebar />
-      <main class="min-w-0 flex-1"><slot /></main>
+      <main class="min-w-0 flex-1 bg-default"><slot /></main>
     </div>
   </div>
 </template>

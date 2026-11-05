@@ -50,6 +50,10 @@ describe('search_messages', () => {
     await post(alice, site, 'report one')
     await post(alice, site, 'report two')
     await post(alice, site, 'report three')
+    // Back-to-back inserts can share a clock tick; make the order explicit.
+    await db.query(`update messages set created_at = now() - interval '3 minutes' where body = 'report one'`)
+    await db.query(`update messages set created_at = now() - interval '2 minutes' where body = 'report two'`)
+    await db.query(`update messages set created_at = now() - interval '1 minute' where body = 'report three'`)
     expect(await search(bob, 'report')).toEqual(['report three', 'report two', 'report one'])
     expect(await search(bob, 'report', 2)).toEqual(['report three', 'report two'])
   })
