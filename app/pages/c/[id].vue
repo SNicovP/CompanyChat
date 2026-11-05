@@ -18,6 +18,8 @@ const toast = useToast()
 const channelId = computed(() => String(route.params.id))
 const channel = computed(() => chat.channels.find((c) => c.id === channelId.value))
 
+const clientName = computed(() => chat.clients.find((c) => c.id === channel.value?.client_id)?.name ?? '')
+
 const messages = ref<Message[]>([])
 const draft = ref('')
 const sending = ref(false)
@@ -421,13 +423,44 @@ async function remove(m: Message) {
   else messages.value = messages.value.filter((x) => x.id !== m.id)
 }
 
+const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { timeStyle: 'short' })
+
+function dayLabel(iso: string) {
+  const d = new Date(iso)
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  return d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: days > 300 ? 'numeric' : undefined })
+}
+
+// Day dividers, and consecutive messages from one person within 5 minutes share a single header.
+const rows = computed(() =>
+  messages.value.map((m, i) => {
+    const prev = messages.value[i - 1]
+    const newDay = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString()
+    const grouped = !newDay && !!prev && prev.user_id === m.user_id && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000
+    return { m, newDay, grouped, dayLabel: newDay ? dayLabel(m.created_at) : '' }
+  }),
+)
+
 const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
 </script>
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex items-center justify-between border-b border-default px-4 py-2">
-      <span class="font-medium">{{ channel ? chat.channelTitle(channel) : '…' }}</span>
+    <div class="flex items-center justify-between border-b border-accented bg-default px-4 py-2.5">
+      <div class="flex min-w-0 items-center gap-2">
+        <template v-if="channel?.kind === 'dm'">
+          <UserAvatar :name="chat.channelTitle(channel)" :status="chat.displayStatus(chat.otherUser(channel)?.id)" size="sm" ring="default" />
+          <span class="truncate text-base font-semibold text-highlighted">{{ chat.channelTitle(channel) }}</span>
+        </template>
+        <template v-else-if="channel">
+          <UIcon :name="channel.is_private ? 'i-lucide-lock' : 'i-lucide-hash'" class="size-5 shrink-0 text-muted" />
+          <span class="truncate text-base font-semibold text-highlighted">{{ channel.name }}</span>
+          <span v-if="clientName" class="truncate text-sm text-muted">in {{ clientName }}</span>
+        </template>
+        <span v-else class="text-muted">…</span>
+      </div>
       <div v-if="channel?.kind === 'project'" class="flex items-center gap-1">
         <UButton
           :icon="watching ? 'i-lucide-bell-ring' : 'i-lucide-bell'"
@@ -458,76 +491,72 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
     <div v-if="chat.loaded && !channel" class="p-6 text-muted">This conversation doesn't exist or you don't have access.</div>
 
     <template v-else>
-      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div ref="scroller" class="flex-1 overflow-y-auto px-4 py-3">
         <p v-if="loading" class="text-muted">Loading…</p>
         <p v-else-if="!messages.length" class="text-muted">No messages yet. Say hello!</p>
-        <div
-          v-for="m in messages"
-          :key="m.id"
-          :data-message-id="m.id"
-          class="group -mx-2 rounded px-2 py-1 transition-colors duration-700"
-          :class="[mentionsMe(m) ? 'border-l-2 border-primary' : '', highlightId === m.id ? 'bg-primary/20' : '']"
-        >
-          <div class="flex items-baseline gap-2">
-            <StatusDot :status="chat.displayStatus(m.user_id)" size="sm" class="self-center" />
-            <span class="font-semibold">{{ chat.userName(m.user_id) }}</span>
-            <span class="text-xs text-muted">{{ time(m.created_at) }}<span v-if="m.edited_at"> (edited)</span></span>
-            <UButton
-              v-if="m.user_id === chat.myId"
-              icon="i-lucide-pencil"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              class="ml-auto opacity-0 group-hover:opacity-100"
-              aria-label="Edit message"
-              @click="startEdit(m)"
-            />
-            <UButton
-              v-if="m.user_id === chat.myId"
-              icon="i-lucide-trash-2"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              class="opacity-0 group-hover:opacity-100"
-              aria-label="Delete message"
-              @click="remove(m)"
-            />
+        <template v-for="r in rows" :key="r.m.id">
+          <div v-if="r.newDay" class="flex items-center gap-3 py-3 text-xs font-medium text-muted">
+            <span class="h-px flex-1 bg-accented" />{{ r.dayLabel }}<span class="h-px flex-1 bg-accented" />
           </div>
-          <div v-if="editingId === m.id" class="mt-1">
-            <UTextarea
-              v-model="editDraft"
-              autoresize
-              :maxrows="8"
-              maxlength="4000"
-              autofocus
-              class="w-full"
-              @keydown.enter="onEditEnter(m, $event)"
-              @keydown.esc="cancelEdit"
-            />
-            <div class="mt-1 flex items-center gap-2 text-xs text-muted">
-              <UButton size="xs" @click="saveEdit(m)">Save</UButton>
-              <UButton size="xs" color="neutral" variant="ghost" @click="cancelEdit">Cancel</UButton>
-              Enter to save, Esc to cancel
+          <div
+            :data-message-id="r.m.id"
+            class="group relative flex gap-3 rounded-md px-2 py-0.5 transition-colors duration-700 hover:bg-muted/70"
+            :class="[r.grouped ? '' : 'mt-3 first:mt-0', mentionsMe(r.m) ? 'border-l-2 border-primary bg-primary/5' : '', highlightId === r.m.id ? 'bg-primary/20!' : '']"
+          >
+            <div class="w-9 shrink-0 pt-0.5">
+              <UserAvatar v-if="!r.grouped" :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
+              <span v-else class="hidden pt-1 text-right text-[10px] leading-5 text-dimmed group-hover:block">{{ clock(r.m.created_at) }}</span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div v-if="!r.grouped" class="flex items-baseline gap-2">
+                <span class="font-semibold text-highlighted">{{ chat.userName(r.m.user_id) }}</span>
+                <span class="text-xs text-muted">{{ time(r.m.created_at) }}<span v-if="r.m.edited_at"> (edited)</span></span>
+              </div>
+              <div
+                v-if="r.m.user_id === chat.myId && editingId !== r.m.id"
+                class="absolute -top-3 right-2 flex rounded-md border border-accented bg-default opacity-0 shadow-sm group-hover:opacity-100"
+              >
+                <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit message" @click="startEdit(r.m)" />
+                <UButton icon="i-lucide-trash-2" size="xs" color="neutral" variant="ghost" aria-label="Delete message" @click="remove(r.m)" />
+              </div>
+              <div v-if="editingId === r.m.id" class="mt-1">
+                <UTextarea
+                  v-model="editDraft"
+                  autoresize
+                  :maxrows="8"
+                  maxlength="4000"
+                  autofocus
+                  class="w-full"
+                  @keydown.enter="onEditEnter(r.m, $event)"
+                  @keydown.esc="cancelEdit"
+                />
+                <div class="mt-1 flex items-center gap-2 text-xs text-muted">
+                  <UButton size="xs" @click="saveEdit(r.m)">Save</UButton>
+                  <UButton size="xs" color="neutral" variant="ghost" @click="cancelEdit">Cancel</UButton>
+                  Enter to save, Esc to cancel
+                </div>
+              </div>
+              <MessageBody v-else-if="r.m.body" :body="r.m.body" />
+              <span v-if="r.grouped && r.m.edited_at && editingId !== r.m.id" class="text-xs text-muted">(edited)</span>
+              <MessageAttachments
+                v-if="r.m.message_attachments?.length"
+                :attachments="r.m.message_attachments"
+                :can-delete="canDeleteAttachment(r.m)"
+                @delete="(a) => removeAttachment(r.m, a)"
+              />
             </div>
           </div>
-          <MessageBody v-else-if="m.body" :body="m.body" />
-          <MessageAttachments
-            v-if="m.message_attachments?.length"
-            :attachments="m.message_attachments"
-            :can-delete="canDeleteAttachment(m)"
-            @delete="(a) => removeAttachment(m, a)"
-          />
-        </div>
+        </template>
       </div>
 
       <form
-        class="border-t border-default p-3"
-        :class="{ 'bg-elevated': dragging }"
+        class="px-4 pb-4 pt-1"
         @submit.prevent="send"
         @dragover.prevent="dragging = true"
         @dragleave.prevent="dragging = false"
         @drop.prevent="onDrop"
       >
+        <div class="rounded-xl border bg-muted/60 p-2 transition-colors focus-within:border-primary" :class="dragging ? 'border-primary bg-primary/10' : 'border-accented'">
         <div v-if="files.length" class="mb-2 flex flex-wrap gap-2">
           <UBadge v-for="(f, i) in files" :key="`${f.name}-${i}`" color="neutral" variant="subtle" class="gap-1">
             {{ f.name }} <span class="text-muted">{{ formatBytes(f.size) }}</span>
@@ -566,6 +595,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             :maxrows="8"
             maxlength="4000"
             placeholder="Message (Enter to send, @ to mention, paste or drop files)"
+            variant="none"
             class="flex-1"
             :disabled="sending"
             @keydown="onComposerKeydown"
@@ -576,6 +606,8 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             @blur="closePicker"
             @paste="onPaste"
           />
+          <UButton type="submit" icon="i-lucide-send-horizontal" :disabled="sending || (!draft.trim() && !files.length)" aria-label="Send message" />
+        </div>
         </div>
       </form>
     </template>
