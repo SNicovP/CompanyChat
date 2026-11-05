@@ -157,6 +157,32 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          show_preview: boolean
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          show_preview?: boolean
+          user_agent?: string | null
+          user_id?: string
+        }
+        Update: {
+          show_preview?: boolean
+        }
+        Relationships: []
+      }
       channel_watches: {
         Row: {
           channel_id: string
@@ -413,6 +439,10 @@ export type Database = {
       is_channel_member: { Args: { chid: string }; Returns: boolean }
       is_client_member: { Args: { cid: string }; Returns: boolean }
       mark_channel_read: { Args: { chid: string }; Returns: undefined }
+      save_push_subscription: {
+        Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_preview: boolean; p_user_agent: string }
+        Returns: undefined
+      }
       set_app_role: {
         Args: {
           new_role: Database["public"]["Enums"]["app_role"]

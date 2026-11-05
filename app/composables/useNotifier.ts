@@ -101,5 +101,10 @@ export function useNotifier() {
     return show({ channelId: 'test', title: 'CompanyChat', body: 'This is a test notification.', url: '/', forcePreview: true })
   }
 
-  return { prefs, permission, supported, canAsk, active, set, request, show, test }
+  /** Just the sound (used when a background push shows the visual notification instead). */
+  function chime() {
+    if (prefs.value.sound) beep()
+  }
+
+  return { prefs, permission, supported, canAsk, active, set, request, show, test, chime }
 }
