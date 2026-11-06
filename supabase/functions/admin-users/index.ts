@@ -1,4 +1,4 @@
-// Admin-only user management that needs the service role key: invite, resend invite, deactivate, reactivate.
+// Admin-only user management that needs the service role key: invite, resend invite, password reset email, deactivate, reactivate.
 // Deploy: npx supabase functions deploy admin-users --use-api
 // Secret:  npx supabase secrets set SITE_URL=https://your-app-url   (used for the invite link)
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -68,6 +68,19 @@ Deno.serve(async (req) => {
     if (hasJoined(target) || !target.email) return json(409, { error: 'That person has already joined, so there is no invite to resend.' })
     const name = typeof target.user_metadata?.display_name === 'string' ? target.user_metadata.display_name : target.email.split('@')[0]!
     const { error } = await sendInvite(target.email, name)
+    if (error) return json(400, { error: error.message })
+    return json(200, { ok: true })
+  }
+
+  // For people who joined but never got to choose a password: email them a link to the set-password page.
+  if (body.action === 'send_password_reset') {
+    const allowed = canInvite(actor.role)
+    if (!allowed.ok) return json(403, { error: allowed.reason })
+    const targetId = typeof body.user_id === 'string' ? body.user_id : ''
+    const { data, error: lookupError } = await admin.auth.admin.getUserById(targetId)
+    if (lookupError || !data.user?.email) return json(404, { error: 'User not found.' })
+    if (!hasJoined(data.user)) return json(409, { error: 'That person has not accepted their invite yet. Resend the invite instead.' })
+    const { error } = await admin.auth.resetPasswordForEmail(data.user.email, { redirectTo: `${siteUrl}/confirm?next=set-password` })
     if (error) return json(400, { error: error.message })
     return json(200, { ok: true })
   }
