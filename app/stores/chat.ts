@@ -281,6 +281,34 @@ export const useChatStore = defineStore('chat', () => {
     return data.id
   }
 
+  /** Remove the stored files of these channels' messages; the database rows cascade, the storage objects do not. */
+  async function removeAttachmentFiles(channelIds: string[]) {
+    if (!channelIds.length) return
+    const { data, error } = await supabase.from('message_attachments').select('path').in('channel_id', channelIds)
+    if (error) throw error
+    const paths = data.map((a) => a.path)
+    for (let i = 0; i < paths.length; i += 100) {
+      const { error: rmError } = await supabase.storage.from('attachments').remove(paths.slice(i, i + 100))
+      if (rmError) throw rmError
+    }
+  }
+
+  /** Deletes the project with all its messages and files. */
+  async function deleteProject(channelId: string) {
+    await removeAttachmentFiles([channelId])
+    const { error } = await supabase.from('channels').delete().eq('id', channelId)
+    if (error) throw error
+    await load()
+  }
+
+  /** Deletes the client, all its projects, messages and files. */
+  async function deleteClient(clientId: string) {
+    await removeAttachmentFiles(channels.value.filter((c) => c.client_id === clientId).map((c) => c.id))
+    const { error } = await supabase.from('clients').delete().eq('id', clientId)
+    if (error) throw error
+    await load()
+  }
+
   async function startDm(userId: string) {
     const { data, error } = await supabase.rpc('get_or_create_dm', { other_user: userId })
     if (error) throw error
@@ -299,5 +327,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, startDm, reset }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, deleteProject, deleteClient, startDm, reset }
 })
