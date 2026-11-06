@@ -79,3 +79,31 @@ describe('member and viewer roles', () => {
     await post(viewer, site, 'now I can')
   })
 })
+
+describe('super admin', () => {
+  it('can do everything an admin can, and more', async () => {
+    const root = (await db.query<{ id: string }>(`select id from profiles where app_role = 'super_admin'`)).rows[0]!.id
+    const secret = await one(`insert into channels (kind, client_id, name, is_private) values ('project', $1, 'budget', true) returning id`, [acme])
+    await db.query(`insert into messages (channel_id, user_id, body) values ($1, $2, 'private numbers')`, [secret, member])
+
+    await asUser(db, root, async () => {
+      // sees and writes in every project, including private ones they are not a member of
+      expect((await db.query('select 1 from messages where channel_id = $1', [secret])).rows).toHaveLength(1)
+      await db.query('insert into messages (channel_id, body) values ($1, $2)', [secret, 'hello'])
+      // creates, renames, archives and restores clients and projects
+      const client = (await db.query<{ id: string }>(`insert into clients (name) values ('Globex') returning id`)).rows[0]!.id
+      await db.query(`insert into channels (kind, client_id, name) values ('project', $1, 'app')`, [client])
+      expect((await db.query(`update clients set name = 'Globex Inc' where id = $1`, [client])).affectedRows).toBe(1)
+      await db.query('select set_channel_archived($1, true)', [secret])
+      await db.query('select set_channel_archived($1, false)', [secret])
+      await db.query('select set_client_archived($1, true)', [client])
+      await db.query('select set_client_archived($1, false)', [client])
+      // manages membership and roles, including promoting to admin (which admins cannot do)
+      await db.query('insert into client_members (client_id, user_id) values ($1, $2)', [client, outsider])
+      await db.query('select set_app_role($1, $2)', [member, 'admin'])
+      await db.query('select set_app_role($1, $2)', [member, 'viewer'])
+      // moderates (deletes) anyone's message
+      expect((await db.query(`delete from messages where body = 'private numbers'`)).affectedRows).toBe(1)
+    })
+  })
+})
