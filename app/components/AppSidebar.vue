@@ -97,7 +97,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
             <UIcon v-if="chat.watchedChannelIds.includes(p.id)" name="i-lucide-bell-ring" class="size-3.5 shrink-0 opacity-70" title="Notifying for every message" />
             <span class="ml-auto flex shrink-0 gap-1">
               <UBadge v-if="chat.mentions[p.id]" size="sm" color="error" :title="`${chat.mentions[p.id]} mention(s) of you`">@{{ chat.mentions[p.id] }}</UBadge>
-              <UBadge v-if="chat.unread[p.id]" size="sm">{{ chat.unread[p.id] }}</UBadge>
+              <UBadge v-if="chat.unread[p.id]" size="sm" color="secondary">{{ chat.unread[p.id] }}</UBadge>
             </span>
           </NuxtLink>
           <button v-if="canCreateProject(client.id)" type="button" class="flex w-full items-center gap-2.5 rounded-md py-1.5 pl-9 pr-2 text-left text-base text-muted hover:bg-accented/60 hover:text-highlighted" @click="openNewProject(client.id)">
