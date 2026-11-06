@@ -3,7 +3,7 @@ import type { PGlite } from '@electric-sql/pglite'
 import { addUser, asUser, createDb } from './helpers/db'
 
 let db: PGlite
-let alice: string // client manager
+let alice: string // admin
 let bob: string // client member
 let carol: string // outsider
 let site: string
@@ -29,10 +29,11 @@ beforeEach(async () => {
   db = await createDb()
   await addUser(db, 'owner')
   alice = await addUser(db, 'alice')
+  await db.query(`update profiles set app_role = 'admin' where id = $1`, [alice])
   bob = await addUser(db, 'bob')
   carol = await addUser(db, 'carol')
   const acme = await one(`insert into clients (name) values ('Acme') returning id`)
-  await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'manager'), ($1, $3, 'member')`, [acme, alice, bob])
+  await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'member'), ($1, $3, 'member')`, [acme, alice, bob])
   site = await one(`insert into channels (kind, client_id, name) values ('project', $1, 'website') returning id`, [acme])
   secret = await one(`insert into channels (kind, client_id, name, is_private) values ('project', $1, 'budget', true) returning id`, [acme])
   bobMsg = await asUser(db, bob, async () => (await db.query<{ id: string }>(`insert into messages (channel_id, body) values ($1, '') returning id`, [site])).rows[0]!.id)
@@ -65,7 +66,7 @@ describe('attachment files (storage policies)', () => {
     expect(await visibleFiles(alice)).toHaveLength(1)
   })
 
-  it('lets the uploader and a project manager delete, but not other members', async () => {
+  it('lets the uploader and a admin delete, but not other members', async () => {
     await upload(bob, `${site}/${bobMsg}/logo.png`)
     await db.query(`insert into client_members (client_id, user_id) select client_id, $1 from channels where id = $2`, [carol, site])
     await asUser(db, carol, async () => {
@@ -99,7 +100,7 @@ describe('deleting a single attachment', () => {
     expect((await db.query('select id from messages where id = $1', [bobMsg])).rows).toHaveLength(1)
   })
 
-  it('lets a project manager do it, but not other members or outsiders', async () => {
+  it('lets a admin do it, but not other members or outsiders', async () => {
     expect((await flag(alice)).affectedRows).toBe(1)
     await db.query('update message_attachments set deleted_at = null')
     await db.query(`insert into client_members (client_id, user_id) select client_id, $1 from channels where id = $2`, [carol, site])

@@ -26,12 +26,12 @@ Requires Node ^22.21 || ^24.11 || >=26 (Nuxt 4).
 
 ## Auth
 - Invite-only: public signup is disabled (`enable_signup = false`). Invite users from the Supabase dashboard (Authentication > Users > Invite) or create them there.
-- The first user created becomes the `owner`; everyone after is a `member`.
+- The first user created becomes the `super_admin`; everyone after is a `member`.
 
 ## Roles and access
-- App roles: `owner` > `admin` > `member`. Owner/admin manage all clients, projects and memberships. Only the owner can promote/demote (`set_app_role`).
-- Client and project memberships: `manager` > `member`. A client manager manages that client's members and projects.
-- Projects are visible to all client members unless marked private (then only channel members, the client's managers and admins).
+- App roles: `super_admin` > `admin` > `member` > `viewer`. Super admin and admin have full access: they create/archive clients and projects and decide who is in each. Members read and write in what they were added to (and DMs) but cannot create or change clients/projects. Viewers only read what they were added to, but can still send DMs. Only the super admin promotes/demotes admins (`set_app_role`); admins can switch people between member and viewer. Client/project "manager" roles are retired (the columns remain, unused).
+- Client and project memberships decide who sees what; only admins change them.
+- Projects are visible to all client members unless marked private (then only channel members and admins).
 - DMs are created with `get_or_create_dm` and are visible only to participants, admins included.
 
 ## Tests
@@ -46,12 +46,12 @@ Wipe test content but keep the schema and users:
 ```sql
 truncate public.messages, public.channel_members, public.channels, public.client_members, public.clients cascade;
 ```
-`npx supabase db reset --linked` also deletes users; the first user created afterwards becomes the owner again.
+`npx supabase db reset --linked` also deletes users; the first user created afterwards becomes the super admin again.
 
 ## Managing people
 - Client page (`/clients/<id>`, click a client name in the sidebar): managers and admins add/remove client members and change roles.
 - Project members: the "Members" button in a project channel (private projects: only listed people, the client's managers and admins can see it).
-- Users page (`/admin/users`, admins): see everyone; only the owner changes app roles. Invites still go through the Supabase dashboard.
+- Users page (`/admin/users`, admins): see everyone; only the super admin changes admin roles. Invites still go through the Supabase dashboard.
 
 ## Presence
 - Connected users are tracked with Supabase Realtime Presence; anyone not connected shows grey/Offline, connected users show their manual status (Online/Away/Busy/Do not disturb).
@@ -74,7 +74,7 @@ npx supabase functions deploy admin-users --use-api
 In the Supabase dashboard (Authentication > URL Configuration) add `<SITE_URL>/**` to the Redirect URLs, and check Authentication > Emails if you want to customise the invite email.
 
 - Invite: Admin > Users > "Invite someone". They get an email, choose a password at `/set-password`, and appear in the list.
-- Deactivate: bans the auth user (no sign-in or token refresh) and flips `profiles.is_active`; restrictive RLS policies cut off any session that is still valid. History is kept. Reactivate reverses it. Admins can deactivate members; only the owner can deactivate admins; nobody can deactivate the owner or themselves.
+- Deactivate: bans the auth user (no sign-in or token refresh) and flips `profiles.is_active`; restrictive RLS policies cut off any session that is still valid. History is kept. Reactivate reverses it. Admins can deactivate members; only the super admin can deactivate admins; nobody can deactivate the super admin or themselves.
 - Supabase's built-in email sender is rate-limited; configure custom SMTP before inviting many people.
 
 ## Attachments

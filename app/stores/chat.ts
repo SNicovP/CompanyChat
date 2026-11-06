@@ -21,12 +21,10 @@ export const useChatStore = defineStore('chat', () => {
 
   const clients = ref<Client[]>([])
   const channels = ref<Channel[]>([])
-  /** Archived clients and projects that I may restore (admins, client managers). Hidden everywhere else. */
+  /** Archived clients and projects that I may restore (admins). Hidden everywhere else. */
   const archivedClients = ref<Client[]>([])
   const archivedProjects = ref<ArchivedProject[]>([])
   const directory = ref<Record<string, DirectoryUser>>({})
-  const managedClientIds = ref<string[]>([])
-  const managedChannelIds = ref<string[]>([])
   const onlineIds = ref<string[]>([])
   const unread = ref<Record<string, number>>({})
   const mentions = ref<Record<string, number>>({})
@@ -70,26 +68,19 @@ export const useChatStore = defineStore('chat', () => {
   const push = usePush()
 
   // UI hints only: RLS is what actually enforces these.
-  const canManageClient = (clientId: string) => profileStore.isAdmin || managedClientIds.value.includes(clientId)
-  const canManageChannel = (channel: Channel | undefined) =>
-    !!channel && channel.kind === 'project' && (
-      (channel.client_id !== null && canManageClient(channel.client_id)) || managedChannelIds.value.includes(channel.id)
-    )
+  const canManageClient = (_clientId?: string) => profileStore.isAdmin
+  const canManageChannel = (channel: Channel | undefined) => !!channel && channel.kind === 'project' && profileStore.isAdmin
 
   async function load() {
-    const [c, ch, p, mine, mineCh, watches] = await Promise.all([
+    const [c, ch, p, watches] = await Promise.all([
       supabase.from('clients').select('id, name, archived_at').order('name'),
       supabase.from('channels').select('id, kind, client_id, name, is_private, archived_at, channel_members(user_id)'),
       supabase.from('profiles').select('id, display_name, status, app_role, is_active').order('display_name'),
-      supabase.from('client_members').select('client_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
-      supabase.from('channel_members').select('channel_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
       supabase.from('channel_watches').select('channel_id'),
     ])
     if (c.error) throw c.error
     if (ch.error) throw ch.error
     if (p.error) throw p.error
-    if (mine.error) throw mine.error
-    if (mineCh.error) throw mineCh.error
     if (watches.error) throw watches.error
     const archivedClientIds = new Set(c.data.filter((x) => x.archived_at).map((x) => x.id))
     clients.value = c.data.filter((x) => !x.archived_at).map(({ id, name }) => ({ id, name }))
@@ -107,8 +98,6 @@ export const useChatStore = defineStore('chat', () => {
       is_private: row.is_private,
       member_ids: row.channel_members.map((m) => m.user_id),
     }))
-    managedClientIds.value = mine.data.map((m) => m.client_id)
-    managedChannelIds.value = mineCh.data.map((m) => m.channel_id)
     watchedChannelIds.value = watches.data.map((w) => w.channel_id)
     directory.value = Object.fromEntries(p.data.map((u) => [u.id, u]))
     loaded.value = true
@@ -318,11 +307,9 @@ export const useChatStore = defineStore('chat', () => {
     archivedClients.value = []
     archivedProjects.value = []
     directory.value = {}
-    managedClientIds.value = []
-    managedChannelIds.value = []
     watchedChannelIds.value = []
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, setProjectArchived, setClientArchived, archivedClients, archivedProjects, startDm, reset }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, setProjectArchived, setClientArchived, archivedClients, archivedProjects, startDm, reset }
 })

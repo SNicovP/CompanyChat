@@ -443,6 +443,8 @@ const rows = computed(() =>
   }),
 )
 
+const profileStore = useProfileStore()
+const readOnly = computed(() => profileStore.isViewer && channel.value?.kind === 'project')
 const deleteOpen = ref(false)
 const deleting = ref(false)
 async function removeProject() {
@@ -496,7 +498,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
 
     <UModal v-if="channel?.kind === 'project'" v-model:open="deleteOpen" title="Archive project">
       <template #body>
-        <p class="text-sm">Archive <strong>{{ channel.name }}</strong>? It disappears for everyone, including its messages and search results. Nothing is deleted: an admin or client manager can restore it from Archived.</p>
+        <p class="text-sm">Archive <strong>{{ channel.name }}</strong>? It disappears for everyone, including its messages and search results. Nothing is deleted: an admin can restore it from Archived.</p>
       </template>
       <template #footer>
         <div class="flex w-full justify-end gap-2">
@@ -510,8 +512,8 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
       <template #body>
         <p class="mb-3 text-sm text-muted">
           {{ channel.is_private
-            ? 'Private project: only these people, the client\'s managers and admins can see it.'
-            : 'Everyone in the client can see this project. Add people here to make them project managers or to track who is on it.' }}
+            ? 'Private project: only these people and admins can see it.'
+            : 'Everyone in the client can see this project. Add people here to track who is on it.' }}
         </p>
         <MembersEditor kind="channel" :id="channel.id" :can-manage="chat.canManageChannel(channel)" />
       </template>
@@ -578,7 +580,12 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         </template>
       </div>
 
+      <div v-if="readOnly" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted">
+        <UIcon name="i-lucide-eye" class="size-4 shrink-0" />
+        You have read-only access to this project. Use a direct message to ask someone about it.
+      </div>
       <form
+        v-else
         class="px-4 pb-4 pt-1"
         @submit.prevent="send"
         @dragover.prevent="dragging = true"

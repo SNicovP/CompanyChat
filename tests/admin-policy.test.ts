@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { canChangeActive, canInvite, parseInvite } from '../supabase/functions/_shared/policy'
 
 describe('canInvite', () => {
-  it('allows owners and admins only', () => {
-    expect(canInvite('owner').ok).toBe(true)
+  it('allows super admins and admins only', () => {
+    expect(canInvite('super_admin').ok).toBe(true)
     expect(canInvite('admin').ok).toBe(true)
     expect(canInvite('member').ok).toBe(false)
   })
 })
 
 describe('canChangeActive', () => {
-  const owner = { id: 'o', role: 'owner' as const }
+  const owner = { id: 'o', role: 'super_admin' as const }
   const admin = { id: 'a', role: 'admin' as const }
   const member = { id: 'm', role: 'member' as const }
 

@@ -4,7 +4,7 @@ import { addUser, asUser, createDb } from './helpers/db'
 
 let db: PGlite
 let owner: string
-let alice: string // client manager
+let alice: string // admin
 let bob: string // client member
 let acme: string
 let site: string
@@ -22,9 +22,10 @@ beforeEach(async () => {
   db = await createDb()
   owner = await addUser(db, 'owner')
   alice = await addUser(db, 'alice')
+  await db.query(`update profiles set app_role = 'admin' where id = $1`, [alice])
   bob = await addUser(db, 'bob')
   acme = await one(`insert into clients (name) values ('Acme') returning id`)
-  await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'manager'), ($1, $3, 'member')`, [acme, alice, bob])
+  await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'member'), ($1, $3, 'member')`, [acme, alice, bob])
   site = await one(`insert into channels (kind, client_id, name) values ('project', $1, 'website') returning id`, [acme])
   await db.query(`insert into messages (channel_id, user_id, body) values ($1, $2, 'hello')`, [site, bob])
 })
@@ -59,7 +60,7 @@ describe('archiving projects', () => {
 
 describe('archiving clients', () => {
   it('lets only admins archive a client, and hides it and its projects from members', async () => {
-    await expect(asUser(db, alice, () => db.query('select set_client_archived($1, true)', [acme]))).rejects.toThrow(/only admins/)
+    await expect(asUser(db, bob, () => db.query('select set_client_archived($1, true)', [acme]))).rejects.toThrow(/only admins/)
     await asUser(db, owner, () => db.query('select set_client_archived($1, true)', [acme]))
     expect(await visibleClients(bob)).toEqual([])
     expect(await visibleProjects(bob)).toEqual([])

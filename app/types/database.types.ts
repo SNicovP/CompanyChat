@@ -460,7 +460,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "owner" | "admin" | "member"
+      app_role: "super_admin" | "admin" | "member" | "viewer"
       channel_kind: "project" | "dm"
       membership_role: "manager" | "member"
       user_status: "online" | "away" | "busy" | "dnd"
@@ -594,7 +594,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      app_role: ["owner", "admin", "member"],
+      app_role: ["super_admin", "admin", "member", "viewer"],
       channel_kind: ["project", "dm"],
       membership_role: ["manager", "member"],
       user_status: ["online", "away", "busy", "dnd"],
