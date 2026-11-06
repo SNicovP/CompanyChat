@@ -37,7 +37,9 @@ export default defineNuxtConfig({
     redirectOptions: {
       login: '/login',
       callback: '/confirm',
-      exclude: [],
+      // Static hosting (Forge) redirects /confirm to /confirm/. The module matches paths exactly, so without
+      // the trailing-slash forms the invite/reset landing page counts as protected and bounces to login.
+      exclude: ['/confirm/', '/login/'],
     },
   },
 })
