@@ -65,6 +65,15 @@ async function callAdminData<T = unknown>(body: Record<string, unknown>): Promis
   return { problem: errorMessage(error), data: null }
 }
 
+async function sendPasswordReset(user: UserRow) {
+  if (!confirm(`Email ${user.display_name} a link to choose a new password?`)) return
+  busyId.value = user.id
+  const problem = await callAdmin({ action: 'send_password_reset', user_id: user.id })
+  busyId.value = null
+  if (problem) toast.add({ title: 'Could not send the password email', description: problem, color: 'error' })
+  else toast.add({ title: 'Password email sent', description: `${user.email} will get a link to choose a new password.` })
+}
+
 // People who have not accepted their invite yet.
 const pending = ref<string[]>([])
 async function loadPending() {
@@ -176,6 +185,18 @@ watch(() => store.profile?.id, (id) => { if (id) { load(); loadPending() } }, { 
                 @click="resendInvite(u)"
               >
                 Resend invite
+              </UButton>
+              <UButton
+                v-if="!pending.includes(u.id) && u.is_active && u.id !== store.profile.id"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-key-round"
+                :loading="busyId === u.id"
+                title="Email this person a link to choose a new password"
+                @click="sendPasswordReset(u)"
+              >
+                Change password
               </UButton>
               <UButton
                 v-if="canToggle(u)"
