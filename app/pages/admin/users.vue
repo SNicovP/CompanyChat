@@ -49,16 +49,36 @@ async function changeRole(user: UserRow, role: AppRole) {
 
 /** Call the admin-users Edge Function; surfaces the function's own error message. */
 async function callAdmin(body: Record<string, unknown>): Promise<string | null> {
-  const { error } = await supabase.functions.invoke('admin-users', { body })
-  if (!error) return null
+  return (await callAdminData(body)).problem
+}
+
+async function callAdminData<T = unknown>(body: Record<string, unknown>): Promise<{ problem: string | null; data: T | null }> {
+  const { data, error } = await supabase.functions.invoke('admin-users', { body })
+  if (!error) return { problem: null, data: data as T }
   const context = (error as { context?: Response }).context
   if (context && typeof context.json === 'function') {
     try {
       const payload = await context.json()
-      if (payload?.error) return String(payload.error)
+      if (payload?.error) return { problem: String(payload.error), data: null }
     } catch { /* fall through */ }
   }
-  return errorMessage(error)
+  return { problem: errorMessage(error), data: null }
+}
+
+// People who have not accepted their invite yet.
+const pending = ref<string[]>([])
+async function loadPending() {
+  const { data } = await callAdminData<{ pending: string[] }>({ action: 'pending' })
+  pending.value = data?.pending ?? []
+}
+
+async function resendInvite(user: UserRow) {
+  busyId.value = user.id
+  const problem = await callAdmin({ action: 'resend_invite', user_id: user.id })
+  busyId.value = null
+  if (problem) toast.add({ title: 'Could not resend the invite', description: problem, color: 'error' })
+  else toast.add({ title: 'Invite resent', description: `A new email is on its way to ${user.email}.` })
+  await loadPending()
 }
 
 const inviteEmail = ref('')
@@ -76,6 +96,8 @@ async function invite() {
   toast.add({ title: 'Invite sent', description: `An email with a sign-up link is on its way to ${inviteEmail.value}.` })
   inviteEmail.value = ''
   inviteName.value = ''
+  await load()
+  await loadPending()
 }
 
 const busyId = ref<string | null>(null)
@@ -96,7 +118,7 @@ function canToggle(u: UserRow) {
   return u.app_role === 'member' || u.app_role === 'viewer' || isSuperAdmin.value
 }
 
-watch(() => store.profile?.id, (id) => { if (id) load() }, { immediate: true })
+watch(() => store.profile?.id, (id) => { if (id) { load(); loadPending() } }, { immediate: true })
 </script>
 
 <template>
@@ -143,6 +165,18 @@ watch(() => store.profile?.id, (id) => { if (id) load() }, { immediate: true })
                 @update:model-value="(r: string) => changeRole(u, r as AppRole)"
               />
               <UBadge v-else color="neutral" variant="subtle">{{ ROLE_LABELS[u.app_role] }}</UBadge>
+              <UBadge v-if="pending.includes(u.id)" color="warning" variant="subtle">Invite pending</UBadge>
+              <UButton
+                v-if="pending.includes(u.id) && u.is_active"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-mail"
+                :loading="busyId === u.id"
+                @click="resendInvite(u)"
+              >
+                Resend invite
+              </UButton>
               <UButton
                 v-if="canToggle(u)"
                 size="xs"
