@@ -10,11 +10,11 @@ const deleting = ref(false)
 async function removeClient() {
   deleting.value = true
   try {
-    await chat.deleteClient(clientId.value)
+    await chat.setClientArchived(clientId.value, true)
     deleteOpen.value = false
     await navigateTo('/')
   } catch (e) {
-    useToast().add({ title: 'Could not delete the client', description: errorMessage(e), color: 'error' })
+    useToast().add({ title: 'Could not archive the client', description: errorMessage(e), color: 'error' })
   } finally {
     deleting.value = false
   }
@@ -28,17 +28,17 @@ const projects = computed(() => chat.projectsByClient[clientId.value] ?? [])
     <template v-else-if="client">
       <div class="flex items-center justify-between gap-3">
         <h1 class="text-2xl font-semibold">{{ client.name }}</h1>
-        <UButton v-if="profile.isAdmin" icon="i-lucide-trash-2" color="error" variant="soft" @click="deleteOpen = true">Delete client</UButton>
+        <UButton v-if="profile.isAdmin" icon="i-lucide-archive" color="neutral" variant="soft" @click="deleteOpen = true">Archive client</UButton>
       </div>
 
-      <UModal v-model:open="deleteOpen" title="Delete client">
+      <UModal v-model:open="deleteOpen" title="Archive client">
         <template #body>
-          <p class="text-sm">Delete <strong>{{ client.name }}</strong> and its {{ projects.length }} project(s)? All their messages and files will be permanently removed for everyone. This cannot be undone.</p>
+          <p class="text-sm">Archive <strong>{{ client.name }}</strong> and its {{ projects.length }} project(s)? They disappear for everyone, including messages and search results. Nothing is deleted: an admin can restore the client from Archived.</p>
         </template>
         <template #footer>
           <div class="flex w-full justify-end gap-2">
             <UButton color="neutral" variant="ghost" @click="deleteOpen = false">Cancel</UButton>
-            <UButton color="error" :loading="deleting" @click="removeClient">Delete client</UButton>
+            <UButton :loading="deleting" @click="removeClient">Archive client</UButton>
           </div>
         </template>
       </UModal>

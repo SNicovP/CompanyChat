@@ -138,6 +138,10 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
       </div>
     </section>
 
+    <NuxtLink v-if="chat.archivedClients.length || chat.archivedProjects.length" to="/archive" class="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-accented/60 hover:text-highlighted">
+      <UIcon name="i-lucide-archive" class="size-4" />Archived
+    </NuxtLink>
+
     <SearchModal v-model:open="searchOpen" />
     <NameModal v-model:open="newClientOpen" title="New client" label="Client name" @submit="onNewClient" />
     <NameModal v-model:open="newProjectOpen" title="New project" label="Project name" with-private @submit="onNewProject" />

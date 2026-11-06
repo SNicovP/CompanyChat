@@ -187,7 +187,7 @@ describe('project channels', () => {
     const site = await createProject(acme, 'website')
     await asUser(db, bob, async () => {
       expect((await db.query(`update channels set name = 'x' where id = $1`, [site])).affectedRows).toBe(0)
-      expect((await db.query(`delete from channels where id = $1`, [site])).affectedRows).toBe(0)
+      await expect(db.query(`delete from channels where id = $1`, [site])).rejects.toThrow(/permission denied/)
     })
     await asUser(db, alice, async () => {
       expect((await db.query(`update channels set name = 'site' where id = $1`, [site])).affectedRows).toBe(1)

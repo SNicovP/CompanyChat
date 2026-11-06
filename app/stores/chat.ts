@@ -4,6 +4,7 @@ import { effectiveStatus, type DisplayStatus } from '~/utils/status'
 
 type Tables = Database['public']['Tables']
 export type Client = Pick<Tables['clients']['Row'], 'id' | 'name'>
+export interface ArchivedProject { id: string; name: string | null; client_id: string; clientName: string }
 export type DirectoryUser = Pick<Tables['profiles']['Row'], 'id' | 'display_name' | 'status' | 'app_role' | 'is_active'>
 export interface Channel {
   id: string
@@ -20,6 +21,9 @@ export const useChatStore = defineStore('chat', () => {
 
   const clients = ref<Client[]>([])
   const channels = ref<Channel[]>([])
+  /** Archived clients and projects that I may restore (admins, client managers). Hidden everywhere else. */
+  const archivedClients = ref<Client[]>([])
+  const archivedProjects = ref<ArchivedProject[]>([])
   const directory = ref<Record<string, DirectoryUser>>({})
   const managedClientIds = ref<string[]>([])
   const managedChannelIds = ref<string[]>([])
@@ -74,8 +78,8 @@ export const useChatStore = defineStore('chat', () => {
 
   async function load() {
     const [c, ch, p, mine, mineCh, watches] = await Promise.all([
-      supabase.from('clients').select('id, name').order('name'),
-      supabase.from('channels').select('id, kind, client_id, name, is_private, channel_members(user_id)'),
+      supabase.from('clients').select('id, name, archived_at').order('name'),
+      supabase.from('channels').select('id, kind, client_id, name, is_private, archived_at, channel_members(user_id)'),
       supabase.from('profiles').select('id, display_name, status, app_role, is_active').order('display_name'),
       supabase.from('client_members').select('client_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
       supabase.from('channel_members').select('channel_id').eq('role', 'manager').eq('user_id', myId.value ?? ''),
@@ -87,8 +91,15 @@ export const useChatStore = defineStore('chat', () => {
     if (mine.error) throw mine.error
     if (mineCh.error) throw mineCh.error
     if (watches.error) throw watches.error
-    clients.value = c.data
-    channels.value = ch.data.map((row) => ({
+    const archivedClientIds = new Set(c.data.filter((x) => x.archived_at).map((x) => x.id))
+    clients.value = c.data.filter((x) => !x.archived_at).map(({ id, name }) => ({ id, name }))
+    archivedClients.value = c.data.filter((x) => x.archived_at).map(({ id, name }) => ({ id, name }))
+    const clientNames = Object.fromEntries(c.data.map((x) => [x.id, x.name]))
+    // A project is archived on its own, or because its client is (the latter is restored with the client).
+    archivedProjects.value = ch.data
+      .filter((row) => row.kind === 'project' && row.archived_at && row.client_id && !archivedClientIds.has(row.client_id))
+      .map((row) => ({ id: row.id, name: row.name, client_id: row.client_id!, clientName: clientNames[row.client_id!] ?? '' }))
+    channels.value = ch.data.filter((row) => !row.archived_at && !(row.client_id && archivedClientIds.has(row.client_id))).map((row) => ({
       id: row.id,
       kind: row.kind,
       client_id: row.client_id,
@@ -281,30 +292,14 @@ export const useChatStore = defineStore('chat', () => {
     return data.id
   }
 
-  /** Remove the stored files of these channels' messages; the database rows cascade, the storage objects do not. */
-  async function removeAttachmentFiles(channelIds: string[]) {
-    if (!channelIds.length) return
-    const { data, error } = await supabase.from('message_attachments').select('path').in('channel_id', channelIds)
-    if (error) throw error
-    const paths = data.map((a) => a.path)
-    for (let i = 0; i < paths.length; i += 100) {
-      const { error: rmError } = await supabase.storage.from('attachments').remove(paths.slice(i, i + 100))
-      if (rmError) throw rmError
-    }
-  }
-
-  /** Deletes the project with all its messages and files. */
-  async function deleteProject(channelId: string) {
-    await removeAttachmentFiles([channelId])
-    const { error } = await supabase.from('channels').delete().eq('id', channelId)
+  async function setProjectArchived(channelId: string, archived: boolean) {
+    const { error } = await supabase.rpc('set_channel_archived', { chid: channelId, archived })
     if (error) throw error
     await load()
   }
 
-  /** Deletes the client, all its projects, messages and files. */
-  async function deleteClient(clientId: string) {
-    await removeAttachmentFiles(channels.value.filter((c) => c.client_id === clientId).map((c) => c.id))
-    const { error } = await supabase.from('clients').delete().eq('id', clientId)
+  async function setClientArchived(clientId: string, archived: boolean) {
+    const { error } = await supabase.rpc('set_client_archived', { cid: clientId, archived })
     if (error) throw error
     await load()
   }
@@ -320,6 +315,8 @@ export const useChatStore = defineStore('chat', () => {
     stop()
     clients.value = []
     channels.value = []
+    archivedClients.value = []
+    archivedProjects.value = []
     directory.value = {}
     managedClientIds.value = []
     managedChannelIds.value = []
@@ -327,5 +324,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, deleteProject, deleteClient, startDm, reset }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, managedClientIds, managedChannelIds, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, setProjectArchived, setClientArchived, archivedClients, archivedProjects, startDm, reset }
 })

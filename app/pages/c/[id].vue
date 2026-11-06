@@ -449,11 +449,11 @@ async function removeProject() {
   if (!channel.value) return
   deleting.value = true
   try {
-    await chat.deleteProject(channel.value.id)
+    await chat.setProjectArchived(channel.value.id, true)
     deleteOpen.value = false
     await navigateTo('/')
   } catch (e) {
-    useToast().add({ title: 'Could not delete the project', description: errorMessage(e), color: 'error' })
+    useToast().add({ title: 'Could not archive the project', description: errorMessage(e), color: 'error' })
   } finally {
     deleting.value = false
   }
@@ -490,18 +490,18 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         <UButton icon="i-lucide-users" size="sm" color="neutral" variant="ghost" @click="membersOpen = true">
           Members
         </UButton>
-        <UButton v-if="chat.canManageChannel(channel)" icon="i-lucide-trash-2" size="sm" color="error" variant="ghost" title="Delete project" aria-label="Delete project" @click="deleteOpen = true" />
+        <UButton v-if="chat.canManageChannel(channel)" icon="i-lucide-archive" size="sm" color="neutral" variant="ghost" title="Archive project" aria-label="Archive project" @click="deleteOpen = true" />
       </div>
     </div>
 
-    <UModal v-if="channel?.kind === 'project'" v-model:open="deleteOpen" title="Delete project">
+    <UModal v-if="channel?.kind === 'project'" v-model:open="deleteOpen" title="Archive project">
       <template #body>
-        <p class="text-sm">Delete <strong>{{ channel.name }}</strong>? All its messages and files will be permanently removed for everyone. This cannot be undone.</p>
+        <p class="text-sm">Archive <strong>{{ channel.name }}</strong>? It disappears for everyone, including its messages and search results. Nothing is deleted: an admin or client manager can restore it from Archived.</p>
       </template>
       <template #footer>
         <div class="flex w-full justify-end gap-2">
           <UButton color="neutral" variant="ghost" @click="deleteOpen = false">Cancel</UButton>
-          <UButton color="error" :loading="deleting" @click="removeProject">Delete project</UButton>
+          <UButton :loading="deleting" @click="removeProject">Archive project</UButton>
         </div>
       </template>
     </UModal>
