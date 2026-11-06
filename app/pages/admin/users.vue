@@ -18,11 +18,14 @@ const toast = useToast()
 const users = ref<UserRow[]>([])
 const loading = ref(true)
 
-const isOwner = computed(() => store.profile?.app_role === 'owner')
-const roleItems = [
-  { label: 'Admin', value: 'admin' },
-  { label: 'Member', value: 'member' },
-]
+const isSuperAdmin = computed(() => store.isSuperAdmin)
+const ROLE_LABELS: Record<AppRole, string> = { super_admin: 'Super admin', admin: 'Admin', member: 'Member', viewer: 'Viewer' }
+// Super admin: admin/member/viewer for anyone. Admins: member/viewer for members and viewers.
+const roleItems = computed(() => (isSuperAdmin.value ? ['admin', 'member', 'viewer'] : ['member', 'viewer']).map((r) => ({ label: ROLE_LABELS[r as AppRole], value: r })))
+function canChangeRole(u: UserRow) {
+  if (!u.is_active || u.id === store.profile?.id || u.app_role === 'super_admin') return false
+  return isSuperAdmin.value || u.app_role === 'member' || u.app_role === 'viewer'
+}
 
 async function load() {
   const { data, error } = await supabase
@@ -89,8 +92,8 @@ async function setActive(user: UserRow, active: boolean) {
 
 // Same rules as the Edge Function; the function is what actually enforces them.
 function canToggle(u: UserRow) {
-  if (u.id === store.profile?.id || u.app_role === 'owner') return false
-  return u.app_role === 'member' || isOwner.value
+  if (u.id === store.profile?.id || u.app_role === 'super_admin') return false
+  return u.app_role === 'member' || u.app_role === 'viewer' || isSuperAdmin.value
 }
 
 watch(() => store.profile?.id, (id) => { if (id) load() }, { immediate: true })
@@ -118,7 +121,7 @@ watch(() => store.profile?.id, (id) => { if (id) load() }, { immediate: true })
 
       <section>
         <h2 class="mb-2 text-sm font-semibold uppercase text-muted">Everyone</h2>
-        <p v-if="!isOwner" class="mb-2 text-sm text-muted">Only the owner can change app roles or deactivate admins.</p>
+        <p class="mb-2 text-sm text-muted">Admins have full access. Members read and write in what they are added to and cannot create or change clients and projects. Viewers only read, plus direct messages. Only the super admin can promote or demote admins.</p>
         <p v-if="loading" class="text-muted">Loading…</p>
         <ul v-else class="divide-y divide-default">
           <li v-for="u in users" :key="u.id" class="flex items-center justify-between gap-3 py-2" :class="{ 'opacity-60': !u.is_active }">
@@ -130,16 +133,16 @@ watch(() => store.profile?.id, (id) => { if (id) load() }, { immediate: true })
               <div class="text-xs text-muted">{{ u.email }}</div>
             </div>
             <div class="flex items-center gap-2">
-              <UBadge v-if="u.app_role === 'owner'" color="primary" variant="subtle">Owner</UBadge>
+              <UBadge v-if="u.app_role === 'super_admin'" color="primary" variant="subtle">Super admin</UBadge>
               <USelect
-                v-else-if="isOwner && u.is_active"
+                v-else-if="canChangeRole(u)"
                 :model-value="u.app_role"
                 :items="roleItems"
                 size="sm"
                 class="w-32"
                 @update:model-value="(r: string) => changeRole(u, r as AppRole)"
               />
-              <UBadge v-else color="neutral" variant="subtle" class="capitalize">{{ u.app_role }}</UBadge>
+              <UBadge v-else color="neutral" variant="subtle">{{ ROLE_LABELS[u.app_role] }}</UBadge>
               <UButton
                 v-if="canToggle(u)"
                 size="xs"

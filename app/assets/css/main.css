@@ -1,2 +1,19 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+/* Dark mode: true black body with dark-grey surfaces (instead of Nuxt UI's blue-tinted slate). */
+.dark {
+  --ui-bg: #000000;
+  --ui-bg-muted: #141414;
+  --ui-bg-elevated: #1c1c1c;
+  --ui-bg-accented: #262626;
+  --ui-bg-inverted: #ffffff;
+  --ui-border: #1f1f1f;
+  --ui-border-muted: #1a1a1a;
+  --ui-border-accented: #333333;
+  --ui-text-dimmed: #737373;
+  --ui-text-muted: #a3a3a3;
+  --ui-text-toned: #d4d4d4;
+  --ui-text: #e5e5e5;
+  --ui-text-highlighted: #ffffff;
+}

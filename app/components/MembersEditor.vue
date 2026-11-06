@@ -1,23 +1,12 @@
 <script setup lang="ts">
-import type { MembershipRole } from '~/composables/useMembers'
-
 const props = defineProps<{ kind: MemberKind; id: string; canManage: boolean }>()
 
 const chat = useChatStore()
 const toast = useToast()
 const idRef = toRef(props, 'id')
-const { members, loading, load, add, setRole, remove } = useMembers(props.kind, idRef)
+const { members, loading, load, add, remove } = useMembers(props.kind, idRef)
 
-const roleItems: { label: string; value: MembershipRole }[] = [
-  { label: 'Manager', value: 'manager' },
-  { label: 'Member', value: 'member' },
-]
-
-const sorted = computed(() =>
-  [...members.value].sort(
-    (a, b) => Number(b.role === 'manager') - Number(a.role === 'manager') || chat.userName(a.user_id).localeCompare(chat.userName(b.user_id)),
-  ),
-)
+const sorted = computed(() => [...members.value].sort((a, b) => chat.userName(a.user_id).localeCompare(chat.userName(b.user_id))))
 
 const candidates = computed(() => {
   const inside = new Set(members.value.map((m) => m.user_id))
@@ -53,17 +42,8 @@ watch(() => [props.kind, props.id], () => run(load, 'Could not load members'), {
 
     <ul class="divide-y divide-default">
       <li v-for="m in sorted" :key="m.user_id" class="flex items-center justify-between gap-3 py-2">
-        <span class="flex items-center gap-2"><StatusDot :status="chat.displayStatus(m.user_id)" size="sm" />{{ chat.userName(m.user_id) }}<span v-if="m.user_id === chat.myId" class="text-muted">(you)</span></span>
+        <span class="flex items-center gap-2"><StatusDot :status="chat.displayStatus(m.user_id)" size="sm" />{{ chat.userName(m.user_id) }}<span v-if="m.user_id === chat.myId" class="text-muted">(you)</span><UBadge v-if="chat.directory[m.user_id]?.app_role === 'viewer'" color="neutral" variant="subtle">Viewer</UBadge></span>
         <div class="flex items-center gap-2">
-          <USelect
-            v-if="canManage"
-            :model-value="m.role"
-            :items="roleItems"
-            size="sm"
-            class="w-32"
-            @update:model-value="(r: MembershipRole) => run(() => setRole(m.user_id, r), 'Could not change role')"
-          />
-          <UBadge v-else color="neutral" variant="subtle" class="capitalize">{{ m.role }}</UBadge>
           <UButton
             v-if="canManage"
             icon="i-lucide-user-minus"

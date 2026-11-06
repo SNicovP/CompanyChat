@@ -3,9 +3,9 @@ import type { PGlite } from '@electric-sql/pglite'
 import { addUser, asUser, createDb } from './helpers/db'
 
 let db: PGlite
-let owner: string
+let owner: string // super admin
 let admin: string
-let alice: string // client manager
+let alice: string // member whose (retired) client role is 'manager'
 let bob: string // plain client member
 let carol: string // not in any client
 
@@ -37,10 +37,10 @@ beforeEach(async () => {
 })
 
 describe('profiles and app roles', () => {
-  it('makes the first user the owner and everyone after a member', async () => {
+  it('makes the first user the super admin and everyone after a member', async () => {
     const { rows } = await db.query<{ id: string; app_role: string }>('select id, app_role from profiles')
     const role = (id: string) => rows.find((r) => r.id === id)!.app_role
-    expect(role(owner)).toBe('owner')
+    expect(role(owner)).toBe('super_admin')
     expect(role(alice)).toBe('member')
   })
 
@@ -58,16 +58,31 @@ describe('profiles and app roles', () => {
     expect(res.affectedRows).toBe(0)
   })
 
-  it('lets only the owner change roles, and never to owner', async () => {
+  it('lets the super admin set admin, member or viewer, but never super_admin', async () => {
     await asUser(db, owner, () => db.query('select set_app_role($1, $2)', [bob, 'admin']))
-    const { rows } = await db.query<{ app_role: string }>('select app_role from profiles where id = $1', [bob])
-    expect(rows[0]!.app_role).toBe('admin')
-
-    await asUser(db, admin, async () => {
-      await expect(db.query('select set_app_role($1, $2)', [carol, 'admin'])).rejects.toThrow(/only the owner/)
-    })
+    await asUser(db, owner, () => db.query('select set_app_role($1, $2)', [carol, 'viewer']))
+    const role = async (id: string) => (await db.query<{ app_role: string }>('select app_role from profiles where id = $1', [id])).rows[0]!.app_role
+    expect(await role(bob)).toBe('admin')
+    expect(await role(carol)).toBe('viewer')
     await asUser(db, owner, async () => {
-      await expect(db.query('select set_app_role($1, $2)', [carol, 'owner'])).rejects.toThrow(/not supported/)
+      await expect(db.query('select set_app_role($1, $2)', [alice, 'super_admin'])).rejects.toThrow(/cannot be assigned/)
+      await expect(db.query('select set_app_role($1, $2)', [owner, 'admin'])).rejects.toThrow(/your own role/)
+    })
+  })
+
+  it('lets admins switch people between member and viewer, but not touch admins', async () => {
+    await asUser(db, admin, () => db.query('select set_app_role($1, $2)', [bob, 'viewer']))
+    const { rows } = await db.query<{ app_role: string }>('select app_role from profiles where id = $1', [bob])
+    expect(rows[0]!.app_role).toBe('viewer')
+    await asUser(db, admin, async () => {
+      await expect(db.query('select set_app_role($1, $2)', [carol, 'admin'])).rejects.toThrow(/only the super admin/)
+      await expect(db.query('select set_app_role($1, $2)', [owner, 'member'])).rejects.toThrow(/cannot change the role/)
+    })
+  })
+
+  it('stops members and viewers changing roles', async () => {
+    await asUser(db, bob, async () => {
+      await expect(db.query('select set_app_role($1, $2)', [carol, 'viewer'])).rejects.toThrow(/only admins/)
     })
   })
 })
@@ -89,24 +104,18 @@ describe('clients and client membership', () => {
     expect(await ids(admin, 'select id from clients')).toEqual([acme])
   })
 
-  it('lets a client manager add and remove members of their own client only', async () => {
+  it('lets admins add and remove client members', async () => {
     const acme = await createClient('Acme')
-    const globex = await createClient('Globex')
-    await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'manager')`, [acme, alice])
-
-    await asUser(db, alice, async () => {
+    await asUser(db, admin, async () => {
       await db.query(`insert into client_members (client_id, user_id) values ($1, $2)`, [acme, bob])
-      await expect(
-        db.query(`insert into client_members (client_id, user_id) values ($1, $2)`, [globex, bob]),
-      ).rejects.toThrow(/row-level security/)
       const del = await db.query(`delete from client_members where client_id = $1 and user_id = $2`, [acme, bob])
       expect(del.affectedRows).toBe(1)
     })
   })
 
-  it('stops plain members managing membership', async () => {
+  it('stops members, even ones with the old manager role, managing membership', async () => {
     const acme = await createClient('Acme')
-    await db.query(`insert into client_members (client_id, user_id) values ($1, $2), ($1, $3)`, [acme, bob, alice])
+    await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'member'), ($1, $3, 'manager')`, [acme, bob, alice])
     await asUser(db, bob, async () => {
       await expect(
         db.query(`insert into client_members (client_id, user_id) values ($1, $2)`, [acme, carol]),
@@ -132,26 +141,22 @@ describe('project channels', () => {
     )
   })
 
-  it('lets client managers and admins create projects, but not plain members', async () => {
+  it('lets admins create projects, but not members (even with the old manager role)', async () => {
     const insert = `insert into channels (kind, client_id, name) values ('project', $1, $2)`
-    await asUser(db, alice, () => db.query(insert, [acme, 'website']))
     await asUser(db, admin, () => db.query(insert, [globex, 'app']))
     await asUser(db, bob, async () => {
       await expect(db.query(insert, [acme, 'sneaky'])).rejects.toThrow(/row-level security/)
     })
     await asUser(db, alice, async () => {
-      await expect(db.query(insert, [globex, 'other-client'])).rejects.toThrow(/row-level security/)
+      await expect(db.query(insert, [acme, 'sneaky'])).rejects.toThrow(/row-level security/)
     })
   })
 
-  it('lets managers and admins read back the project they just created (insert ... returning)', async () => {
+  it('lets admins read back the project they just created (insert ... returning)', async () => {
     const insert = `insert into channels (kind, client_id, name, is_private) values ('project', $1, $2, $3) returning id`
-    await asUser(db, alice, async () => {
-      expect((await db.query(insert, [acme, 'returned', false])).rows).toHaveLength(1)
-      expect((await db.query(insert, [acme, 'returned-private', true])).rows).toHaveLength(1)
-    })
     await asUser(db, admin, async () => {
       expect((await db.query(insert, [globex, 'admin-returned', false])).rows).toHaveLength(1)
+      expect((await db.query(insert, [globex, 'admin-returned-private', true])).rows).toHaveLength(1)
     })
   })
 
@@ -164,39 +169,41 @@ describe('project channels', () => {
   it('hides private projects from client members who are not in the channel', async () => {
     const secret = await createProject(acme, 'budget', true)
     expect(await ids(bob, 'select id from channels')).toEqual([])
-    expect(await ids(alice, 'select id from channels')).toEqual([secret]) // client manager
+    expect(await ids(alice, 'select id from channels')).toEqual([]) // the old manager role no longer sees private projects
     expect(await ids(admin, 'select id from channels')).toEqual([secret])
 
     await db.query(`insert into channel_members (channel_id, user_id) values ($1, $2)`, [secret, bob])
     expect(await ids(bob, 'select id from channels')).toEqual([secret])
   })
 
-  it('lets client managers manage channel members, and plain members not', async () => {
+  it('lets admins manage channel members, and members not', async () => {
     const site = await createProject(acme, 'website')
-    await asUser(db, alice, () =>
+    await asUser(db, admin, () =>
       db.query(`insert into channel_members (channel_id, user_id) values ($1, $2)`, [site, bob]),
     )
-    await asUser(db, bob, async () => {
-      await expect(
-        db.query(`insert into channel_members (channel_id, user_id) values ($1, $2)`, [site, carol]),
-      ).rejects.toThrow(/row-level security/)
-    })
+    for (const member of [bob, alice]) {
+      await asUser(db, member, async () => {
+        await expect(
+          db.query(`insert into channel_members (channel_id, user_id) values ($1, $2)`, [site, carol]),
+        ).rejects.toThrow(/row-level security/)
+      })
+    }
   })
 
   it('stops members renaming or deleting projects', async () => {
     const site = await createProject(acme, 'website')
     await asUser(db, bob, async () => {
       expect((await db.query(`update channels set name = 'x' where id = $1`, [site])).affectedRows).toBe(0)
-      expect((await db.query(`delete from channels where id = $1`, [site])).affectedRows).toBe(0)
+      await expect(db.query(`delete from channels where id = $1`, [site])).rejects.toThrow(/permission denied/)
     })
-    await asUser(db, alice, async () => {
+    await asUser(db, admin, async () => {
       expect((await db.query(`update channels set name = 'site' where id = $1`, [site])).affectedRows).toBe(1)
     })
   })
 
   it('does not let a project be moved to another client', async () => {
     const site = await createProject(acme, 'website')
-    await asUser(db, alice, async () => {
+    await asUser(db, admin, async () => {
       await expect(db.query(`update channels set client_id = $1 where id = $2`, [globex, site])).rejects.toThrow(/permission denied/)
     })
   })

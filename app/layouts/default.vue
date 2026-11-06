@@ -129,12 +129,18 @@ const items = computed(() => [
         <span class="inline-flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary"><UIcon name="i-lucide-message-square-text" class="size-4" /></span>
         CompanyChat
       </NuxtLink>
-      <UDropdownMenu v-if="store.profile" :items="items">
-        <UButton color="neutral" variant="ghost">
-          <StatusDot :status="effectiveStatus(store.profile.status, true)" />
-          {{ store.profile.display_name }}
-        </UButton>
-      </UDropdownMenu>
+      <div class="flex items-center gap-1">
+        <ClientOnly>
+          <UColorModeButton color="neutral" variant="ghost" aria-label="Switch between light and dark mode" />
+          <template #fallback><div class="size-8" /></template>
+        </ClientOnly>
+        <UDropdownMenu v-if="store.profile" :items="items">
+          <UButton color="neutral" variant="ghost">
+            <StatusDot :status="effectiveStatus(store.profile.status, true)" />
+            {{ store.profile.display_name }}
+          </UButton>
+        </UDropdownMenu>
+      </div>
     </header>
     <div v-if="notifier.canAsk.value" class="flex items-center justify-between gap-3 border-b border-default bg-elevated px-4 py-2 text-sm">
       <span>Get desktop notifications for direct messages and @mentions?</span>

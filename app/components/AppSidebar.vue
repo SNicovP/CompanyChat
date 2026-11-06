@@ -63,62 +63,66 @@ async function openDm(userId: string) {
 
 const people = computed(() => chat.activePeople.filter((u) => u.id !== chat.myId))
 
-// Admins add clients; admins and that client's managers add projects; RLS is the real gate, this just hides the button.
+// Only admins add clients and projects; RLS is the real gate, this just hides the button.
 const canCreateClient = computed(() => profile.isAdmin)
 const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
 </script>
 
 <template>
-  <aside class="flex w-72 shrink-0 flex-col gap-6 overflow-y-auto border-r border-accented bg-muted p-3">
+  <aside class="flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-r border-accented bg-muted p-3">
     <UButton icon="i-lucide-search" color="neutral" variant="outline" block class="justify-start" @click="searchOpen = true">
       <span class="text-muted">Search messages</span>
       <UKbd class="ml-auto" value="meta" /><UKbd value="K" />
     </UButton>
 
     <section>
-      <div class="flex items-center justify-between border-b border-accented px-2 pb-1.5 text-xs font-semibold uppercase tracking-wider text-dimmed">
-        Clients &amp; projects
-        <UButton v-if="canCreateClient" icon="i-lucide-plus" size="xs" color="neutral" variant="ghost" aria-label="New client" @click="newClientOpen = true" />
+      <div class="flex items-center gap-2.5 px-2 py-1 text-base font-semibold text-highlighted">
+        <UIcon name="i-lucide-briefcase" class="size-5 shrink-0" />Clients &amp; projects
       </div>
-      <p v-if="chat.loaded && !chat.clients.length" class="px-2 pt-2 text-sm text-muted">No clients yet.</p>
-      <div v-for="client in chat.clients" :key="client.id" class="mt-3">
-        <div class="flex items-center gap-2 px-2">
-          <UIcon name="i-lucide-building-2" class="size-4 shrink-0 text-primary" />
-          <NuxtLink :to="`/clients/${client.id}`" class="min-w-0 flex-1 truncate text-sm font-semibold text-highlighted hover:underline">{{ client.name }}</NuxtLink>
-          <UButton v-if="canCreateProject(client.id)" icon="i-lucide-plus" size="xs" color="neutral" variant="ghost" aria-label="New project" @click="openNewProject(client.id)" />
+      <p v-if="chat.loaded && !chat.clients.length" class="px-2 py-1 pl-9 text-sm text-muted">No clients yet.</p>
+      <div v-for="client in chat.clients" :key="client.id" class="mt-2">
+        <div class="flex items-center gap-2 pl-9 pr-2 py-1">
+          <NuxtLink :to="`/clients/${client.id}`" class="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-wide text-toned hover:text-highlighted">{{ client.name }}</NuxtLink>
         </div>
-        <div class="ml-4 mt-1 space-y-0.5 border-l border-accented pl-2">
+        <div class="space-y-0.5">
           <NuxtLink
             v-for="p in chat.projectsByClient[client.id] ?? []"
             :key="p.id"
             :to="`/c/${p.id}`"
-            class="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm hover:bg-accented/60"
-            :class="activeId === p.id ? 'bg-primary/15 font-medium text-primary' : chat.unread[p.id] ? 'font-semibold text-highlighted' : 'text-muted hover:text-highlighted'"
+            class="flex items-center gap-2.5 rounded-md py-1.5 pl-9 pr-2 text-base"
+            :class="activeId === p.id ? 'bg-primary font-medium text-inverted' : chat.unread[p.id] ? 'font-bold text-highlighted hover:bg-accented/60' : 'text-toned hover:bg-accented/60 hover:text-highlighted'"
           >
-            <UIcon :name="p.is_private ? 'i-lucide-lock' : 'i-lucide-hash'" class="size-3.5 shrink-0" />
+            <UIcon :name="p.is_private ? 'i-lucide-lock' : 'i-lucide-hash'" class="size-4 shrink-0" />
             <span class="truncate">{{ p.name }}</span>
-            <UIcon v-if="chat.watchedChannelIds.includes(p.id)" name="i-lucide-bell-ring" class="size-3 shrink-0 opacity-70" title="Notifying for every message" />
+            <UIcon v-if="chat.watchedChannelIds.includes(p.id)" name="i-lucide-bell-ring" class="size-3.5 shrink-0 opacity-70" title="Notifying for every message" />
             <span class="ml-auto flex shrink-0 gap-1">
               <UBadge v-if="chat.mentions[p.id]" size="sm" color="error" :title="`${chat.mentions[p.id]} mention(s) of you`">@{{ chat.mentions[p.id] }}</UBadge>
               <UBadge v-if="chat.unread[p.id]" size="sm">{{ chat.unread[p.id] }}</UBadge>
             </span>
           </NuxtLink>
+          <button v-if="canCreateProject(client.id)" type="button" class="flex w-full items-center gap-2.5 rounded-md py-1.5 pl-9 pr-2 text-left text-base text-muted hover:bg-accented/60 hover:text-highlighted" @click="openNewProject(client.id)">
+            <span class="inline-flex size-4 items-center justify-center rounded bg-accented"><UIcon name="i-lucide-plus" class="size-3" /></span>Add project
+          </button>
         </div>
       </div>
+      <button v-if="canCreateClient" type="button" class="mt-2 flex w-full items-center gap-2.5 rounded-md py-1.5 pl-2 pr-2 text-left text-base text-muted hover:bg-accented/60 hover:text-highlighted" @click="newClientOpen = true">
+        <span class="inline-flex size-5 items-center justify-center rounded bg-accented"><UIcon name="i-lucide-plus" class="size-3.5" /></span>Add client
+      </button>
     </section>
 
+    <hr class="border-accented">
+
     <section>
-      <div class="flex items-center justify-between border-b border-accented px-2 pb-1.5 text-xs font-semibold uppercase tracking-wider text-dimmed">
-        Direct messages
-        <UButton icon="i-lucide-plus" size="xs" color="neutral" variant="ghost" aria-label="New message" @click="dmOpen = true" />
+      <div class="flex items-center gap-2.5 px-2 py-1 text-base font-semibold text-highlighted">
+        <UIcon name="i-lucide-messages-square" class="size-5 shrink-0" />Direct messages
       </div>
-      <div class="mt-2 space-y-0.5">
+      <div class="space-y-0.5">
         <NuxtLink
           v-for="dm in chat.dms"
           :key="dm.id"
           :to="`/c/${dm.id}`"
-          class="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accented/60"
-          :class="activeId === dm.id ? 'bg-primary/15 font-medium text-primary' : chat.unread[dm.id] ? 'font-semibold text-highlighted' : 'text-muted hover:text-highlighted'"
+          class="flex items-center gap-2.5 rounded-md py-1.5 pl-8 pr-2 text-base"
+          :class="activeId === dm.id ? 'bg-primary font-medium text-inverted' : chat.unread[dm.id] ? 'font-bold text-highlighted hover:bg-accented/60' : 'text-toned hover:bg-accented/60 hover:text-highlighted'"
         >
           <UserAvatar :name="chat.channelTitle(dm)" :status="chat.displayStatus(chat.otherUser(dm)?.id)" size="sm" />
           <span class="truncate">{{ chat.channelTitle(dm) }}</span>
@@ -127,9 +131,16 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
             <UBadge v-if="chat.unread[dm.id]" size="sm">{{ chat.unread[dm.id] }}</UBadge>
           </span>
         </NuxtLink>
-        <p v-if="!chat.dms.length" class="px-2 text-sm text-muted">No conversations yet.</p>
+        <p v-if="!chat.dms.length" class="py-1 pl-9 pr-2 text-sm text-muted">No conversations yet.</p>
+        <button type="button" class="flex w-full items-center gap-2.5 rounded-md py-1.5 pl-8 pr-2 text-left text-base text-muted hover:bg-accented/60 hover:text-highlighted" @click="dmOpen = true">
+          <span class="inline-flex size-6 items-center justify-center rounded bg-accented"><UIcon name="i-lucide-plus" class="size-4" /></span>New message
+        </button>
       </div>
     </section>
+
+    <NuxtLink v-if="chat.archivedClients.length || chat.archivedProjects.length" to="/archive" class="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-accented/60 hover:text-highlighted">
+      <UIcon name="i-lucide-archive" class="size-4" />Archived
+    </NuxtLink>
 
     <SearchModal v-model:open="searchOpen" />
     <NameModal v-model:open="newClientOpen" title="New client" label="Client name" @submit="onNewClient" />

@@ -78,6 +78,7 @@ export type Database = {
       }
       channels: {
         Row: {
+          archived_at: string | null
           client_id: string | null
           created_at: string
           created_by: string | null
@@ -87,6 +88,7 @@ export type Database = {
           name: string | null
         }
         Insert: {
+          archived_at?: string | null
           client_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -96,6 +98,7 @@ export type Database = {
           name?: string | null
         }
         Update: {
+          archived_at?: string | null
           client_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -218,18 +221,21 @@ export type Database = {
       }
       clients: {
         Row: {
+          archived_at: string | null
           created_at: string
           created_by: string | null
           id: string
           name: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           name: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -443,6 +449,8 @@ export type Database = {
         Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_preview: boolean; p_user_agent: string }
         Returns: undefined
       }
+      set_channel_archived: { Args: { chid: string; archived: boolean }; Returns: undefined }
+      set_client_archived: { Args: { cid: string; archived: boolean }; Returns: undefined }
       set_app_role: {
         Args: {
           new_role: Database["public"]["Enums"]["app_role"]
@@ -452,7 +460,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "owner" | "admin" | "member"
+      app_role: "super_admin" | "admin" | "member" | "viewer"
       channel_kind: "project" | "dm"
       membership_role: "manager" | "member"
       user_status: "online" | "away" | "busy" | "dnd"
@@ -586,7 +594,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      app_role: ["owner", "admin", "member"],
+      app_role: ["super_admin", "admin", "member", "viewer"],
       channel_kind: ["project", "dm"],
       membership_role: ["manager", "member"],
       user_status: ["online", "away", "busy", "dnd"],

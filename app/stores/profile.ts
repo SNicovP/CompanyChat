@@ -6,7 +6,7 @@ export interface Profile {
   email: string
   display_name: string
   avatar_url: string | null
-  app_role: 'owner' | 'admin' | 'member'
+  app_role: 'super_admin' | 'admin' | 'member' | 'viewer'
   status: UserStatus
 }
 
@@ -15,7 +15,10 @@ export const useProfileStore = defineStore('profile', () => {
   const user = useSupabaseUser()
   const profile = ref<Profile | null>(null)
 
-  const isAdmin = computed(() => profile.value?.app_role === 'owner' || profile.value?.app_role === 'admin')
+  const isSuperAdmin = computed(() => profile.value?.app_role === 'super_admin')
+  const isAdmin = computed(() => profile.value?.app_role === 'super_admin' || profile.value?.app_role === 'admin')
+  /** Viewers can read what they were added to and send direct messages, nothing else. */
+  const isViewer = computed(() => profile.value?.app_role === 'viewer')
 
   async function load() {
     const id = user.value?.id ?? user.value?.sub
@@ -39,5 +42,5 @@ export const useProfileStore = defineStore('profile', () => {
     }
   }
 
-  return { profile, isAdmin, load, setStatus }
+  return { profile, isAdmin, isSuperAdmin, isViewer, load, setStatus }
 })

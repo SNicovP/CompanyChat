@@ -4,7 +4,7 @@ import { addUser, asUser, createDb } from './helpers/db'
 
 let db: PGlite
 let owner: string
-let alice: string // client manager
+let alice: string // admin
 let bob: string // client member
 let carol: string // outsider
 let site: string
@@ -24,10 +24,11 @@ beforeEach(async () => {
   db = await createDb()
   owner = await addUser(db, 'owner')
   alice = await addUser(db, 'alice')
+  await db.query(`update profiles set app_role = 'admin' where id = $1`, [alice])
   bob = await addUser(db, 'bob')
   carol = await addUser(db, 'carol')
   const acme = await one(`insert into clients (name) values ('Acme') returning id`)
-  await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'manager'), ($1, $3, 'member')`, [acme, alice, bob])
+  await db.query(`insert into client_members (client_id, user_id, role) values ($1, $2, 'member'), ($1, $3, 'member')`, [acme, alice, bob])
   site = await one(`insert into channels (kind, client_id, name) values ('project', $1, 'website') returning id`, [acme])
   secret = await one(`insert into channels (kind, client_id, name, is_private) values ('project', $1, 'budget', true) returning id`, [acme])
 })
