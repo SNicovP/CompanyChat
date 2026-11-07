@@ -12,14 +12,15 @@ export default defineNuxtPlugin(() => {
 
   const hasDraft = () => [...document.querySelectorAll('textarea')].some((t) => t.value.trim().length > 0)
 
-  async function check() {
+  async function check(retry = true) {
     if (checking || !current) return
     checking = true
     try {
       const res = await fetch(`/_nuxt/builds/latest.json?t=${Date.now()}`, { cache: 'no-store' })
-      if (!res.ok) return
+      if (!res.ok) return console.debug('[update] could not read latest.json:', res.status)
       const latest = (await res.json()) as { id?: string }
-      if (!latest.id || latest.id === current) return
+      if (!latest.id || latest.id === current) return console.debug('[update] up to date', current)
+      console.debug('[update] new version', latest.id, 'running', current)
       if (!hasDraft()) return location.reload()
       if (asked) return
       asked = true
@@ -29,16 +30,19 @@ export default defineNuxtPlugin(() => {
         duration: 0,
         actions: [{ label: 'Reload now', onClick: () => location.reload() }],
       })
-    } catch {
-      /* offline or no manifest (dev): try again next time */
+    } catch (e) {
+      // Often the network is not back yet when a phone wakes the app: try once more shortly.
+      console.debug('[update] check failed:', e)
+      if (retry) setTimeout(() => check(false), 4000)
     } finally {
       checking = false
     }
   }
 
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check() })
-  window.addEventListener('focus', check)
-  window.addEventListener('online', check)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === "visible") check() })
+  window.addEventListener('focus', () => check())
+  window.addEventListener('online', () => check())
+  window.addEventListener('pageshow', () => check()) // restored from the back/forward cache
   setInterval(() => { if (document.visibilityState === 'visible') check() }, 10 * 60_000)
   check()
 })
