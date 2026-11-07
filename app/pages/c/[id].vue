@@ -475,7 +475,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         <template v-else-if="channel">
           <UIcon :name="channel.is_private ? 'i-lucide-lock' : 'i-lucide-hash'" class="size-5 shrink-0 text-muted" />
           <span class="truncate text-base font-semibold text-highlighted">{{ channel.name }}</span>
-          <span v-if="clientName" class="truncate text-sm text-muted">in {{ clientName }}</span>
+          <span v-if="clientName" class="hidden truncate text-sm text-muted sm:inline">in {{ clientName }}</span>
         </template>
         <span v-else class="text-muted">…</span>
       </div>
@@ -490,7 +490,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           @click="toggleWatch"
         />
         <UButton icon="i-lucide-users" size="sm" color="neutral" variant="ghost" @click="membersOpen = true">
-          Members
+          <span class="hidden sm:inline">Members</span>
         </UButton>
         <UButton v-if="chat.canManageChannel(channel)" icon="i-lucide-archive" size="sm" color="neutral" variant="ghost" title="Archive project" aria-label="Archive project" @click="deleteOpen = true" />
       </div>
@@ -531,12 +531,12 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           </div>
           <div
             :data-message-id="r.m.id"
-            class="group relative flex gap-3 rounded-md px-2 py-0.5 transition-colors duration-700 hover:bg-muted/70"
+            tabindex="0" class="group relative flex gap-3 rounded-md px-2 py-0.5 outline-none transition-colors duration-700 hover:bg-muted/70"
             :class="[r.grouped ? '' : 'mt-3 first:mt-0', mentionsMe(r.m) ? 'border-l-2 border-primary bg-primary/5' : '', highlightId === r.m.id ? 'bg-primary/20!' : '']"
           >
             <div class="w-9 shrink-0 pt-0.5">
               <UserAvatar v-if="!r.grouped" :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
-              <span v-else class="hidden pt-1 text-right text-[10px] leading-5 text-dimmed group-hover:block">{{ clock(r.m.created_at) }}</span>
+              <span v-else class="hidden pt-1 text-right text-[10px] leading-5 text-dimmed group-hover:block group-focus-within:block">{{ clock(r.m.created_at) }}</span>
             </div>
             <div class="min-w-0 flex-1">
               <div v-if="!r.grouped" class="flex items-baseline gap-2">
@@ -545,7 +545,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               </div>
               <div
                 v-if="r.m.user_id === chat.myId && editingId !== r.m.id"
-                class="absolute -top-3 right-2 flex rounded-md border border-accented bg-default opacity-0 shadow-sm group-hover:opacity-100"
+                class="absolute -top-3 right-2 flex rounded-md border border-accented bg-default opacity-0 shadow-sm group-hover:opacity-100 group-focus-within:opacity-100"
               >
                 <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit message" @click="startEdit(r.m)" />
                 <UButton icon="i-lucide-trash-2" size="xs" color="neutral" variant="ghost" aria-label="Delete message" @click="remove(r.m)" />

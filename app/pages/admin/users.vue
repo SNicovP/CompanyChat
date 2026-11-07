@@ -155,7 +155,7 @@ watch(() => store.profile?.id, (id) => { if (id) { load(); loadPending() } }, { 
         <p class="mb-2 text-sm text-muted">Admins have full access. Members read and write in what they are added to and cannot create or change clients and projects. Viewers only read, plus direct messages. Only the super admin can promote or demote admins.</p>
         <p v-if="loading" class="text-muted">Loading…</p>
         <ul v-else class="divide-y divide-default">
-          <li v-for="u in users" :key="u.id" class="flex items-center justify-between gap-3 py-2" :class="{ 'opacity-60': !u.is_active }">
+          <li v-for="u in users" :key="u.id" class="flex flex-wrap items-center justify-between gap-3 py-2" :class="{ 'opacity-60': !u.is_active }">
             <div>
               <div>
                 {{ u.display_name }}<span v-if="u.id === store.profile.id" class="text-muted"> (you)</span>
@@ -163,7 +163,7 @@ watch(() => store.profile?.id, (id) => { if (id) { load(); loadPending() } }, { 
               </div>
               <div class="text-xs text-muted">{{ u.email }}</div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <UBadge v-if="u.app_role === 'super_admin'" color="primary" variant="subtle">Super admin</UBadge>
               <USelect
                 v-else-if="canChangeRole(u)"
