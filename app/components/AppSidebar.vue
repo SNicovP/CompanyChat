@@ -22,6 +22,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 const activeId = computed(() => String(route.params.id ?? ''))
 
+// Clients can be collapsed to hide their projects. Remembered per browser (a convenience, so failures are ignored).
+const STORAGE_KEY = 'companychat:collapsed-clients'
+const collapsed = ref<string[]>([])
+onMounted(() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+    if (Array.isArray(saved)) collapsed.value = saved.filter((x): x is string => typeof x === 'string')
+  } catch { /* no saved state */ }
+})
+function toggleClient(id: string) {
+  collapsed.value = collapsed.value.includes(id) ? collapsed.value.filter((x) => x !== id) : [...collapsed.value, id]
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(collapsed.value)) } catch { /* private mode etc. */ }
+}
+const isCollapsed = (id: string) => collapsed.value.includes(id)
+/** Unread and mention totals for a client, shown on its row while it is collapsed. */
+function clientTotals(clientId: string) {
+  const projects = chat.projectsByClient[clientId] ?? []
+  return {
+    unread: projects.reduce((n, p) => n + (chat.unread[p.id] ?? 0), 0),
+    mentions: projects.reduce((n, p) => n + (chat.mentions[p.id] ?? 0), 0),
+    hasActive: projects.some((p) => p.id === activeId.value),
+  }
+}
+
 function fail(title: string, e: unknown) {
   toast.add({ title, description: errorMessage(e), color: 'error' })
 }
@@ -81,10 +105,27 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
       </div>
       <p v-if="chat.loaded && !chat.clients.length" class="px-2 py-1 pl-9 text-sm text-muted">No clients yet.</p>
       <div v-for="client in chat.clients" :key="client.id" class="mt-2">
-        <div class="flex items-center gap-2 pl-9 pr-2 py-1">
-          <NuxtLink :to="`/clients/${client.id}`" class="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-wide text-toned hover:text-highlighted">{{ client.name }}</NuxtLink>
+        <div class="flex items-center gap-1 pl-1.5 pr-2 py-0.5">
+          <button
+            type="button"
+            class="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted hover:bg-accented/60 hover:text-highlighted"
+            :aria-label="isCollapsed(client.id) ? `Show ${client.name} projects` : `Hide ${client.name} projects`"
+            :aria-expanded="!isCollapsed(client.id)"
+            @click="toggleClient(client.id)"
+          >
+            <UIcon name="i-lucide-chevron-right" class="size-4 transition-transform" :class="isCollapsed(client.id) ? '' : 'rotate-90'" />
+          </button>
+          <NuxtLink
+            :to="`/clients/${client.id}`"
+            class="min-w-0 flex-1 truncate pl-1 text-sm font-semibold uppercase tracking-wide hover:text-highlighted"
+            :class="isCollapsed(client.id) && clientTotals(client.id).hasActive ? 'text-primary' : 'text-toned'"
+          >{{ client.name }}</NuxtLink>
+          <span v-if="isCollapsed(client.id)" class="flex shrink-0 gap-1">
+            <UBadge v-if="clientTotals(client.id).mentions" size="sm" color="error">@{{ clientTotals(client.id).mentions }}</UBadge>
+            <UBadge v-if="clientTotals(client.id).unread" size="sm" color="secondary">{{ clientTotals(client.id).unread }}</UBadge>
+          </span>
         </div>
-        <div class="space-y-0.5">
+        <div v-show="!isCollapsed(client.id)" class="space-y-0.5">
           <NuxtLink
             v-for="p in chat.projectsByClient[client.id] ?? []"
             :key="p.id"
