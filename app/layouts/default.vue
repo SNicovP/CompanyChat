@@ -10,6 +10,11 @@ const notifier = useNotifier()
 const installer = useInstallPrompt()
 const push = usePush()
 
+// On phones the sidebar is a slide-over drawer opened from the header; it closes when you pick something.
+const menuOpen = ref(false)
+const route = useRoute()
+watch(() => route.fullPath, () => { menuOpen.value = false })
+
 useHead({
   title: computed(() => {
     if (chat.totalMentions) return `(@${chat.totalMentions}) CompanyChat`
@@ -123,12 +128,15 @@ const items = computed(() => [
 </script>
 
 <template>
-  <div class="flex h-screen flex-col">
+  <div class="flex h-dvh flex-col">
     <header class="flex items-center justify-between border-b border-accented bg-default px-4 py-2">
+      <div class="flex items-center gap-1">
+      <UButton class="md:hidden" icon="i-lucide-menu" color="neutral" variant="ghost" aria-label="Open menu" @click="menuOpen = true" />
       <NuxtLink to="/" class="flex items-center gap-2 font-semibold text-highlighted">
         <span class="inline-flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary"><UIcon name="i-lucide-message-square-text" class="size-4" /></span>
         CompanyChat
       </NuxtLink>
+      </div>
       <div class="flex items-center gap-1">
         <ClientOnly>
           <UColorModeButton color="neutral" variant="ghost" aria-label="Switch between light and dark mode" />
@@ -150,7 +158,13 @@ const items = computed(() => [
       </span>
     </div>
     <div class="flex min-h-0 flex-1">
-      <AppSidebar />
+      <div v-if="menuOpen" class="fixed inset-0 z-30 bg-black/60 md:hidden" @click="menuOpen = false" />
+      <div
+        class="fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] transition-transform duration-200 md:static md:z-auto md:max-w-none md:translate-x-0"
+        :class="menuOpen ? 'translate-x-0' : '-translate-x-full'"
+      >
+        <AppSidebar class="h-full w-full" />
+      </div>
       <main class="min-w-0 flex-1 bg-default"><slot /></main>
     </div>
   </div>
