@@ -129,7 +129,7 @@ const items = computed(() => [
 
 <template>
   <div class="flex h-dvh flex-col">
-    <header class="flex items-center justify-between border-b border-accented bg-default px-4 py-2">
+    <header class="app-header flex items-center justify-between border-b border-accented bg-default px-4 py-2">
       <div class="flex items-center gap-1">
       <!-- On phones the sidebar is closed: show what it would show, so nothing goes unnoticed. -->
       <div class="relative md:hidden">
