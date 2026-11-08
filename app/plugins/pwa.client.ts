@@ -1,6 +1,7 @@
 // Register the service worker (needs HTTPS or localhost) and remember the browser's install prompt.
 export default defineNuxtPlugin(() => {
-  if ('serviceWorker' in navigator) {
+  const isDesktopApp = /Electron/.test(navigator.userAgent) // the desktop app does not need the PWA service worker
+  if ('serviceWorker' in navigator && !isDesktopApp) {
     navigator.serviceWorker.register('/sw.js').catch((e) => console.debug('[pwa] service worker not registered:', e))
   }
   // A notification was clicked while the app is open: go to that conversation without reloading.

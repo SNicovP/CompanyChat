@@ -25,7 +25,9 @@ export function usePush() {
   const vapidKey = String(useRuntimeConfig().public.vapidPublicKey ?? '')
   const enabled = useState<boolean>('push-enabled', load)
 
-  const supported = computed(() => !!vapidKey && typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window)
+  // The desktop app (Electron) has no push service; it keeps running in the background instead.
+  const isDesktopApp = typeof navigator !== 'undefined' && /Electron/.test(navigator.userAgent)
+  const supported = computed(() => !isDesktopApp && !!vapidKey && typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window)
   /** Pushes are switched on here and the browser allows notifications. */
   const active = computed(() => supported.value && enabled.value && notifier.permission.value === 'granted')
 
