@@ -176,8 +176,9 @@ export const useChatStore = defineStore('chat', () => {
       body,
       nameOf: userName,
     })
-    const problem = notifier.show({ channelId: channel.id, ...text })
-    if (problem) console.debug('[notify] not shown:', problem)
+    void notifier.show({ channelId: channel.id, ...text }).then((problem) => {
+      if (problem) console.debug('[notify] not shown:', problem)
+    })
   }
 
   async function setWatching(channelId: string, on: boolean) {
