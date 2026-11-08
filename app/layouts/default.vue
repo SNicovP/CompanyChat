@@ -131,7 +131,22 @@ const items = computed(() => [
   <div class="flex h-dvh flex-col">
     <header class="flex items-center justify-between border-b border-accented bg-default px-4 py-2">
       <div class="flex items-center gap-1">
-      <UButton class="md:hidden" icon="i-lucide-menu" color="neutral" variant="ghost" aria-label="Open menu" @click="menuOpen = true" />
+      <!-- On phones the sidebar is closed: show what it would show, so nothing goes unnoticed. -->
+      <div class="relative md:hidden">
+        <UButton
+          icon="i-lucide-menu"
+          color="neutral"
+          variant="ghost"
+          :aria-label="chat.totalMentions ? `Open menu, ${chat.totalMentions} mentions` : chat.totalUnread ? `Open menu, ${chat.totalUnread} unread` : 'Open menu'"
+          @click="menuOpen = true"
+        />
+        <UBadge
+          v-if="chat.totalMentions || chat.totalUnread"
+          size="sm"
+          :color="chat.totalMentions ? 'error' : 'secondary'"
+          class="pointer-events-none absolute -right-1 -top-1 min-w-5 justify-center px-1"
+        >{{ chat.totalMentions ? `@${chat.totalMentions}` : chat.totalUnread > 99 ? '99+' : chat.totalUnread }}</UBadge>
+      </div>
       <NuxtLink to="/" class="flex items-center gap-2 font-semibold text-highlighted">
         <span class="inline-flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary"><UIcon name="i-lucide-message-square-text" class="size-4" /></span>
         CompanyChat
