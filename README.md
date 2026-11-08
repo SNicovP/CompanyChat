@@ -166,3 +166,18 @@ One-time setup:
 Troubleshooting: Supabase dashboard, Edge Functions, send-push, Logs. Browsers must allow notifications for the site, and
 on iPhone the app must be added to the Home Screen (iOS 16.4+). Local development cannot receive pushes (the webhook
 cannot reach localhost); test on the live site.
+
+## Desktop app (Electron)
+
+`desktop/` is a thin Electron shell that loads the live site, so every deploy reaches the desktop app automatically (no separate release needed for web changes). It adds a Dock/taskbar badge with your unread count, keeps running when the window is closed (notifications keep arriving), opens external links in your browser, and shows a retry page when offline. Background Web Push is not used in the desktop app (the app itself stays running instead), so "Notify when the app is closed" is hidden there.
+
+```bash
+cd desktop
+npm install
+npm run dev        # points at http://localhost:3000 (run the web app with npm run dev first)
+npm start          # points at the live site (override with COMPANYCHAT_URL)
+npm run dist:mac   # .dmg in desktop/dist (run on a Mac)
+npm run dist:win   # .exe installer (best run on Windows)
+```
+
+Builds are unsigned: on a Mac, right-click the app and choose Open the first time; Windows may show a SmartScreen warning ("More info" then "Run anyway"). Signing needs an Apple Developer account (macOS) and a code-signing certificate (Windows). The icon is the same placeholder as the PWA (`desktop/build/icon.png`).

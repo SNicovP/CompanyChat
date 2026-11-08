@@ -1,0 +1,51 @@
+{
+  "name": "companychat-desktop",
+  "productName": "CompanyChat",
+  "version": "1.0.0",
+  "description": "Desktop app for CompanyChat",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "COMPANYCHAT_URL=http://localhost:3000 electron .",
+    "pack": "electron-builder --dir",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "africa.ncloud.companychat",
+    "productName": "CompanyChat",
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network"
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.7.1",
+    "electron-builder": "^26.18.0"
+  }
+}
