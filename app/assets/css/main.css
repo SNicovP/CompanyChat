@@ -17,3 +17,14 @@
   --ui-text: #e5e5e5;
   --ui-text-highlighted: #ffffff;
 }
+
+/* Desktop app on macOS: leave room for the window buttons and let the header move the window. */
+.desktop-mac .app-header {
+  padding-left: 5.5rem;
+  -webkit-app-region: drag;
+}
+.desktop-mac .app-header a,
+.desktop-mac .app-header button,
+.desktop-mac .app-header [role='menu'] {
+  -webkit-app-region: no-drag;
+}
