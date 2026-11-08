@@ -75,7 +75,7 @@ function notificationState() {
   return onOff(notifier.active.value)
 }
 
-function sendTest() {
+async function sendTest() {
   if (notifier.permission.value !== 'granted') {
     toast.add({
       title: 'Notifications are not allowed yet',
@@ -86,13 +86,13 @@ function sendTest() {
     })
     return
   }
-  const problem = notifier.test()
+  const problem = await notifier.test()
   toast.add(
     problem
       ? { title: 'Could not show a notification', description: problem, color: 'error' }
       : {
           title: 'Test notification sent',
-          description: 'If you saw nothing, check your computer\'s notification settings for this browser and that Focus / Do Not Disturb is off.',
+          description: 'If you saw nothing, check your device\'s notification settings for this app or browser and that Focus / Do Not Disturb is off.',
         },
   )
 }

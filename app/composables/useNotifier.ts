@@ -73,31 +73,41 @@ export function useNotifier() {
   const canAsk = computed(() => permission.value === 'default' && !prefs.value.dismissed)
   const active = computed(() => prefs.value.enabled && permission.value === 'granted')
 
-  /** Show a notification. Returns an error message if the browser refused (for the test button). */
-  function show(opts: { channelId: string; title: string; body: string; url?: string; forcePreview?: boolean }): string | null {
+  /** Show a notification. Resolves to an error message if the browser refused (for the test button). */
+  async function show(opts: { channelId: string; title: string; body: string; url?: string; forcePreview?: boolean }): Promise<string | null> {
     if (!active.value) return 'Notifications are switched off or not allowed for this site.'
+    const options = {
+      body: prefs.value.preview || opts.forcePreview ? opts.body : 'New message',
+      tag: opts.channelId, // a newer message in the same channel replaces the older one
+      silent: true, // we play our own sound so it can be switched off
+      // Without this a notification that replaces an earlier one with the same tag is shown silently.
+      renotify: true,
+    } as NotificationOptions
+    const url = opts.url ?? `/c/${opts.channelId}`
     try {
-      const n = new Notification(opts.title, {
-        body: prefs.value.preview || opts.forcePreview ? opts.body : 'New message',
-        tag: opts.channelId, // a newer message in the same channel replaces the older one
-        silent: true, // we play our own sound so it can be switched off
-        // Without this a notification that replaces an earlier one with the same tag is shown silently.
-        renotify: true,
-      } as NotificationOptions)
+      const n = new Notification(opts.title, options)
       n.onclick = () => {
         window.focus()
-        navigateTo(opts.url ?? `/c/${opts.channelId}`)
+        navigateTo(url)
         n.close()
       }
     } catch (e) {
-      return e instanceof Error ? e.message : String(e) // some browsers only allow notifications via a service worker
+      // Android Chrome (and installed PWAs) refuse `new Notification()`: they only allow showing one through
+      // the service worker, whose click handler takes you to the conversation.
+      try {
+        const registration = await navigator.serviceWorker?.getRegistration()
+        if (!registration) return e instanceof Error ? e.message : String(e)
+        await registration.showNotification(opts.title, { ...options, data: { url } })
+      } catch (e2) {
+        return e2 instanceof Error ? e2.message : String(e2)
+      }
     }
     if (prefs.value.sound) beep()
     return null
   }
 
   /** Fire a sample notification right now, regardless of focus, to check the whole chain. */
-  function test(): string | null {
+  function test(): Promise<string | null> {
     return show({ channelId: 'test', title: 'CompanyChat', body: 'This is a test notification.', url: '/', forcePreview: true })
   }
 
