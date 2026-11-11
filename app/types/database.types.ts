@@ -352,6 +352,7 @@ export type Database = {
           created_at: string
           edited_at: string | null
           id: string
+          reply_to: string | null
           user_id: string | null
         }
         Insert: {
@@ -360,6 +361,7 @@ export type Database = {
           created_at?: string
           edited_at?: string | null
           id?: string
+          reply_to?: string | null
           user_id?: string | null
         }
         Update: {
@@ -368,9 +370,17 @@ export type Database = {
           created_at?: string
           edited_at?: string | null
           id?: string
+          reply_to?: string | null
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_reply_to_fkey"
+            columns: ["reply_to"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_channel_id_fkey"
             columns: ["channel_id"]
