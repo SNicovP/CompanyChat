@@ -41,12 +41,16 @@ php artisan reverb:start                   # websockets on ws://localhost:8080
 php artisan queue:work                     # push notifications (and queued mail)
 ```
 
-Tests: `php artisan test` (33 feature tests, ported from the Supabase Vitest suite).
+Tests: `php artisan test` (feature tests ported from the Supabase Vitest suite, plus replies and security).
+
+To run against local MySQL instead of SQLite, create a database and set `DB_CONNECTION=mysql`, `DB_HOST=127.0.0.1`,
+`DB_DATABASE=companychat_staging`, `DB_USERNAME` and `DB_PASSWORD` in `.env`, then `php artisan migrate`.
 
 ### Production notes
 
-- Use **PostgreSQL** (`DB_CONNECTION=pgsql`): the migration then adds the `body_tsv` full-text index used by search.
-  SQLite/MySQL work too, with a `LIKE` fallback for search.
+- Use **MySQL 8** (`DB_CONNECTION=mysql`, utf8mb4) and run the same engine locally, on staging and in production. The suite
+  passes on MySQL and SQLite (`DB_CONNECTION=mysql DB_DATABASE=companychat_testing php artisan test`). Search uses a `LIKE`
+  match, which is instant at office scale; PostgreSQL would add a full-text index (`body_tsv`) but is not needed.
 - Configure real mail (`MAIL_*`): invites and password resets are emailed. Set `FRONTEND_URL` so links open the app.
 - Run `reverb:start` and `queue:work` under a process manager (Forge daemons / Supervisor), and put Reverb behind
   TLS (`wss://`). Generate your own `REVERB_APP_ID/KEY/SECRET`.
