@@ -112,18 +112,20 @@ export const useChatStore = defineStore('chat', () => {
   // --- unread counts ---------------------------------------------------------------------
   const viewing = () => typeof document !== 'undefined' && document.hasFocus()
 
-  async function loadUnread() {
+  /** False when the counts could not be fetched (e.g. still offline). */
+  async function loadUnread(): Promise<boolean> {
     const { data, error } = await supabase.rpc('get_unread_counts')
-    if (error) return // counts are a nicety; never block the app on them
+    if (error) return false // counts are a nicety; never block the app on them
     const counts = Object.fromEntries(data.map((r) => [r.chan_id, Number(r.unread)]))
     if (activeChannelId.value && viewing()) delete counts[activeChannelId.value]
     unread.value = counts
 
     const { data: mentionData, error: mentionError } = await supabase.rpc('get_unread_mention_counts')
-    if (mentionError) return
+    if (mentionError) return false
     const mentionCounts = Object.fromEntries(mentionData.map((r) => [r.chan_id, Number(r.mentions)]))
     if (activeChannelId.value && viewing()) delete mentionCounts[activeChannelId.value]
     mentions.value = mentionCounts
+    return true
   }
 
   async function markRead(channelId: string) {
@@ -166,7 +168,8 @@ export const useChatStore = defineStore('chat', () => {
     if (!decision.notify) return
     if (push.active.value) {
       // The service worker shows the notification (also when this tab is open but not focused); don't double up.
-      notifier.chime()
+      // It plays the system sound itself unless a CompanyChat window is visible, so only chime when we are.
+      if (document.visibilityState === 'visible') notifier.chime()
       return
     }
     const text = notificationText({
@@ -179,6 +182,37 @@ export const useChatStore = defineStore('chat', () => {
     void notifier.show({ channelId: channel.id, ...text }).then((problem) => {
       if (problem) console.debug('[notify] not shown:', problem)
     })
+  }
+
+  // --- catching up after sleep or a dropped connection -------------------------------------
+  // Live events sent while the socket was down are gone. When it comes back, reload the unread counts and tell
+  // the person in one notification what arrived meanwhile (unless push already did, or they are looking).
+  let catchingUp: Promise<void> | null = null
+  let lastCatchUp = 0
+
+  function catchUp(reason: string) {
+    if (!loaded.value || catchingUp || Date.now() - lastCatchUp < 5000) return
+    lastCatchUp = Date.now()
+    catchingUp = (async () => {
+      const before = { unread: { ...unread.value }, mentions: { ...mentions.value } }
+      if (!(await loadUnread())) {
+        lastCatchUp = 0 // network not back yet: let the reconnect try again
+        return
+      }
+      const summary = catchUpSummary({
+        before,
+        after: { unread: unread.value, mentions: mentions.value },
+        channels: channels.value,
+        watched: watchedChannelIds.value,
+        windowFocused: viewing(),
+        status: profileStore.profile?.status,
+      })
+      console.debug('[notify] catch-up after', reason, summary ? `- ${summary.count} missed` : '- nothing missed')
+      if (!summary || push.active.value) return // with push on, the service worker already showed them
+      const first = summary.channelIds[0]!
+      const problem = await notifier.show({ channelId: 'catch-up', url: `/c/${first}`, forcePreview: true, ...catchUpText(summary) })
+      if (problem) console.debug('[notify] catch-up not shown:', problem)
+    })().finally(() => { catchingUp = null })
   }
 
   async function setWatching(channelId: string, on: boolean) {
@@ -199,6 +233,7 @@ export const useChatStore = defineStore('chat', () => {
   let profileChannel: ReturnType<typeof supabase.channel> | null = null
   let messageChannel: ReturnType<typeof supabase.channel> | null = null
   let mentionChannel: ReturnType<typeof supabase.channel> | null = null
+  let stopResume: (() => void) | null = null
   const onFocus = () => { if (activeChannelId.value) markRead(activeChannelId.value) }
 
   /** Idempotent per signed-in user (the auth user object can re-emit on token refresh). */
@@ -231,12 +266,17 @@ export const useChatStore = defineStore('chat', () => {
       .subscribe()
 
     // RLS filters these events, so we only hear about channels we can access.
+    let joinedBefore = false
     messageChannel = supabase
       .channel('messages-all')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         onIncomingMessage(payload.new as { channel_id: string; user_id: string | null; body?: string })
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return
+        if (joinedBefore) catchUp('reconnect') // rejoined after the socket dropped: something may have been missed
+        joinedBefore = true
+      })
 
     // Only our own mentions are delivered (RLS), so no filter is needed beyond being explicit.
     mentionChannel = supabase
@@ -248,6 +288,8 @@ export const useChatStore = defineStore('chat', () => {
       })
       .subscribe()
     window.addEventListener('focus', onFocus)
+    // Desktop app woke from sleep: give Wi-Fi a moment, then see what was missed.
+    stopResume = desktopBridge()?.onResume?.(() => { setTimeout(() => catchUp('wake'), 3000) }) ?? null
   }
 
   function stop() {
@@ -256,6 +298,8 @@ export const useChatStore = defineStore('chat', () => {
     if (mentionChannel) supabase.removeChannel(mentionChannel)
     mentionChannel = null
     if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
+    stopResume?.()
+    stopResume = null
     if (presenceChannel) supabase.removeChannel(presenceChannel)
     if (profileChannel) supabase.removeChannel(profileChannel)
     presenceChannel = profileChannel = null
