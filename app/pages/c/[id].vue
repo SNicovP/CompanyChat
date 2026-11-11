@@ -4,6 +4,7 @@ import type { Database } from '~/types/database.types'
 type Attachment = Pick<Database['public']['Tables']['message_attachments']['Row'], 'id' | 'message_id' | 'path' | 'file_name' | 'mime_type' | 'size_bytes' | 'deleted_at'>
 type Message = Pick<Database['public']['Tables']['messages']['Row'], 'id' | 'channel_id' | 'user_id' | 'body' | 'created_at' | 'edited_at'> & {
   message_attachments?: Attachment[]
+  pending?: boolean // shown before the server has confirmed it
 }
 
 const ATTACHMENT_COLUMNS = 'id, message_id, path, file_name, mime_type, size_bytes, deleted_at'
@@ -22,7 +23,6 @@ const clientName = computed(() => chat.clients.find((c) => c.id === channel.valu
 
 const messages = ref<Message[]>([])
 const draft = ref('')
-const sending = ref(false)
 const loading = ref(true)
 const scroller = ref<HTMLElement | null>(null)
 const membersOpen = ref(false)
@@ -223,19 +223,19 @@ function onDrop(e: DragEvent) {
 }
 
 /** Upload the files of a just-created message; returns the attachment rows. Throws on any failure. */
-async function uploadAttachments(messageId: string, picked: File[]): Promise<Attachment[]> {
+async function uploadAttachments(channel: string, messageId: string, picked: File[]): Promise<Attachment[]> {
   const bucket = supabase.storage.from('attachments')
   const uploaded: string[] = []
   try {
     const rows: Database['public']['Tables']['message_attachments']['Insert'][] = []
     for (const [i, file] of picked.entries()) {
-      const path = `${channelId.value}/${messageId}/${i}_${safeFileName(file.name)}`
+      const path = `${channel}/${messageId}/${i}_${safeFileName(file.name)}`
       const { error } = await bucket.upload(path, file, { contentType: file.type || undefined, upsert: false })
       if (error) throw error
       uploaded.push(path)
       rows.push({
         message_id: messageId,
-        channel_id: channelId.value,
+        channel_id: channel,
         path,
         file_name: file.name.slice(0, 255),
         mime_type: file.type || null,
@@ -251,47 +251,86 @@ async function uploadAttachments(messageId: string, picked: File[]): Promise<Att
   }
 }
 
-async function send() {
-  const body = displayToTokens(draft.value.trim(), mentionMap.value)
+// Sends run one after another so messages keep the order they were typed in.
+let sendQueue: Promise<void> = Promise.resolve()
+let pendingSeq = 0
+
+/**
+ * Optimistic send: the composer clears and the message shows (dimmed) straight away;
+ * the insert and any uploads run in the background and the row is swapped for the real one.
+ */
+function send() {
+  const text = draft.value.trim()
+  const map = { ...mentionMap.value }
+  const body = displayToTokens(text, map)
   const picked = [...files.value]
-  if ((!body && !picked.length) || sending.value) return
-  sending.value = true
-  const { data, error } = await supabase
-    .from('messages')
-    .insert({ channel_id: channelId.value, body })
-    .select(MESSAGE_COLUMNS)
-    .single()
-  if (error) {
-    sending.value = false
-    toast.add({ title: 'Message not sent', description: errorMessage(error), color: 'error' })
-    return
-  }
+  if (!body && !picked.length) return
 
-  let attachments: Attachment[] = []
-  if (picked.length) {
-    try {
-      attachments = await uploadAttachments(data.id, picked)
-    } catch (e) {
-      await supabase.from('messages').delete().eq('id', data.id) // don't leave a half-sent message behind
-      messages.value = messages.value.filter((x) => x.id !== data.id)
-      sending.value = false
-      toast.add({ title: 'Files not sent', description: errorMessage(e), color: 'error' })
-      return // keep the draft and files so the user can retry
-    }
-  }
-
-  sending.value = false
+  const id = channelId.value
+  const tempId = `pending-${++pendingSeq}`
+  messages.value.push({
+    id: tempId,
+    channel_id: id,
+    user_id: chat.myId,
+    body,
+    created_at: new Date().toISOString(),
+    edited_at: null,
+    message_attachments: [],
+    pending: true,
+  })
   draft.value = ''
   mentionMap.value = {}
   closePicker()
   files.value = []
-  const existing = messages.value.find((x) => x.id === data.id)
-  if (existing) existing.message_attachments = attachments // realtime got there first
-  else {
-    messages.value.push({ ...data, message_attachments: attachments })
-    sortMessages()
-  }
   scrollToBottom()
+
+  sendQueue = sendQueue.then(() => deliver(id, tempId, body, picked, text, map))
+}
+
+async function deliver(id: string, tempId: string, body: string, picked: File[], text: string, map: Record<string, string>) {
+  const fail = (title: string, e: unknown) => {
+    if (id === channelId.value) {
+      messages.value = messages.value.filter((x) => x.id !== tempId)
+      // Give the text and files back so the user can retry, unless they've started typing something else.
+      if (!draft.value && !files.value.length) {
+        draft.value = text
+        mentionMap.value = map
+        files.value = picked
+      }
+    }
+    toast.add({ title, description: errorMessage(e), color: 'error' })
+  }
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({ channel_id: id, body })
+    .select(MESSAGE_COLUMNS)
+    .single()
+  if (error) return fail('Message not sent', error)
+
+  let attachments: Attachment[] = []
+  if (picked.length) {
+    try {
+      attachments = await uploadAttachments(id, data.id, picked)
+    } catch (e) {
+      await supabase.from('messages').delete().eq('id', data.id) // don't leave a half-sent message behind
+      messages.value = messages.value.filter((x) => x.id !== data.id)
+      return fail('Files not sent', e)
+    }
+  }
+
+  if (id !== channelId.value) return // user moved on; the channel reloads from the server
+  const real = { ...data, message_attachments: attachments }
+  const existing = messages.value.find((x) => x.id === data.id)
+  if (existing) {
+    existing.message_attachments = attachments // realtime got there first
+    messages.value = messages.value.filter((x) => x.id !== tempId)
+  } else {
+    const i = messages.value.findIndex((x) => x.id === tempId)
+    if (i >= 0) messages.value[i] = real
+    else messages.value.push(real)
+  }
+  sortMessages()
 }
 
 function startEdit(m: Message) {
@@ -341,7 +380,7 @@ function onEditEnter(m: Message, e: KeyboardEvent) {
 /** Up arrow in an empty composer edits your most recent message, like Slack. */
 function onArrowUp(e: KeyboardEvent) {
   if (draft.value || files.value.length || editingId.value) return
-  const mine = [...messages.value].reverse().find((m) => m.user_id === chat.myId)
+  const mine = [...messages.value].reverse().find((m) => m.user_id === chat.myId && !m.pending)
   if (!mine) return
   e.preventDefault()
   startEdit(mine)
@@ -532,7 +571,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           <div
             :data-message-id="r.m.id"
             tabindex="0" class="group relative flex gap-3 rounded-md px-2 py-0.5 outline-none transition-colors duration-700 hover:bg-muted/70"
-            :class="[r.grouped ? '' : 'mt-3 first:mt-0', mentionsMe(r.m) ? 'border-l-2 border-primary bg-primary/5' : '', highlightId === r.m.id ? 'bg-primary/20!' : '']"
+            :class="[r.grouped ? '' : 'mt-3 first:mt-0', mentionsMe(r.m) ? 'border-l-2 border-primary bg-primary/5' : '', highlightId === r.m.id ? 'bg-primary/20!' : '', r.m.pending ? 'opacity-60' : '']"
           >
             <div class="w-9 shrink-0 pt-0.5">
               <UserAvatar v-if="!r.grouped" :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
@@ -544,7 +583,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
                 <span class="text-xs text-muted">{{ time(r.m.created_at) }}<span v-if="r.m.edited_at"> (edited)</span></span>
               </div>
               <div
-                v-if="r.m.user_id === chat.myId && editingId !== r.m.id"
+                v-if="r.m.user_id === chat.myId && !r.m.pending && editingId !== r.m.id"
                 class="absolute -top-3 right-2 flex rounded-md border border-accented bg-default opacity-0 shadow-sm group-hover:opacity-100 group-focus-within:opacity-100"
               >
                 <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit message" @click="startEdit(r.m)" />
@@ -633,7 +672,6 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             placeholder="Message (Enter to send, @ to mention, paste or drop files)"
             variant="none"
             class="flex-1"
-            :disabled="sending"
             @keydown="onComposerKeydown"
             @input="updatePicker"
             @click="updatePicker"
@@ -642,7 +680,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             @blur="closePicker"
             @paste="onPaste"
           />
-          <UButton type="submit" icon="i-lucide-send-horizontal" :disabled="sending || (!draft.trim() && !files.length)" aria-label="Send message" />
+          <UButton type="submit" icon="i-lucide-send-horizontal" :disabled="!draft.trim() && !files.length" aria-label="Send message" />
         </div>
         </div>
       </form>
