@@ -108,7 +108,11 @@ class AuthAndAdminTest extends TestCase
         $admin = User::factory()->admin()->create();
         User::factory()->create();
 
-        $this->actingAs(User::factory()->create())->getJson('/api/users')->assertOk()->assertJsonMissingPath('0.email');
+        // The list is sorted by name (random in tests), and you may see your own email, so look at everyone else.
+        $member = User::factory()->create();
+        $others = collect($this->actingAs($member)->getJson('/api/users')->assertOk()->json())->where('id', '!=', $member->id);
+        $this->assertCount(2, $others);
+        $others->each(fn ($row) => $this->assertArrayNotHasKey('email', $row));
         $this->actingAs($admin)->getJson('/api/users')->assertJsonStructure([['email']]);
     }
 }

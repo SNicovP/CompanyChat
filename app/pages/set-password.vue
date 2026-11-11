@@ -4,6 +4,7 @@ import { errorMessage as errorText } from '~/utils/errors'
 definePageMeta({ layout: 'blank' })
 
 const api = useApi()
+const current = ref('')
 const password = ref('')
 const confirm = ref('')
 const loading = ref(false)
@@ -15,7 +16,7 @@ async function save() {
   if (password.value !== confirm.value) return void (errorMessage.value = 'The passwords do not match.')
   loading.value = true
   try {
-    await api('/me/password', { method: 'PUT', body: { password: password.value } })
+    await api('/me/password', { method: 'PUT', body: { current_password: current.value, password: password.value } })
     await navigateTo('/')
   } catch (e) {
     errorMessage.value = errorText(e)
@@ -29,9 +30,12 @@ async function save() {
   <div class="flex min-h-screen items-center justify-center p-4">
     <UCard class="w-full max-w-sm">
       <template #header>
-        <h1 class="text-xl font-semibold">Choose your password</h1>
+        <h1 class="text-xl font-semibold">Change your password</h1>
       </template>
       <form class="space-y-4" @submit.prevent="save">
+        <UFormField label="Current password">
+          <UInput v-model="current" type="password" autocomplete="current-password" required class="w-full" />
+        </UFormField>
         <UFormField label="New password">
           <UInput v-model="password" type="password" autocomplete="new-password" required class="w-full" />
         </UFormField>

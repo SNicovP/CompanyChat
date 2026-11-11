@@ -77,7 +77,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignUuid('message_id')->constrained()->cascadeOnDelete();
             $table->foreignUuid('channel_id')->constrained()->cascadeOnDelete();
-            $table->string('path', 1024)->unique();
+            $table->string('path', 500)->unique(); // channel/message/file ≈ 180 chars; 500 keeps the unique index under MySQL's 3072-byte key limit
             $table->string('file_name');
             $table->string('mime_type')->nullable();
             $table->unsignedBigInteger('size_bytes');

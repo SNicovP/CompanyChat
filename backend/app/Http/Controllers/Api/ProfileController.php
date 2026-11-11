@@ -9,7 +9,9 @@ use App\Http\Resources\UserResource;
 use App\Support\Realtime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 
 /** The signed-in person's own profile. */
@@ -41,12 +43,19 @@ class ProfileController extends Controller
         return new UserResource($user);
     }
 
-    /** Set a new password while signed in (the set-password page). Other devices are signed out. */
+    /** Change your password while signed in (needs the current one). Other devices are signed out. */
     public function updatePassword(Request $request): JsonResponse
     {
-        $data = $request->validate(['password' => ['required', 'string', PasswordRule::min(8)]]);
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', PasswordRule::min(8)],
+        ]);
 
         $user = $request->user();
+        // A stolen token must not be enough to take the account over.
+        if (! $user->password || ! Hash::check($data['current_password'], $user->password)) {
+            throw ValidationException::withMessages(['current_password' => 'Your current password is not correct.']);
+        }
         $user->forceFill(['password' => $data['password'], 'joined_at' => $user->joined_at ?? now()])->save();
 
         $current = $user->currentAccessToken();

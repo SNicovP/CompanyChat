@@ -25,7 +25,11 @@ class AppServiceProvider extends ServiceProvider
         ResetPassword::createUrlUsing(fn ($user, string $token) => config('app.frontend_url').'/reset-password?'
             .http_build_query(['token' => $token, 'email' => $user->email]));
 
-        RateLimiter::for('auth', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
+        RateLimiter::for('auth', fn (Request $request) => [
+            Limit::perMinute(20)->by($request->ip()),
+            // Per account too, so guessing one person's password is slow even from many addresses.
+            Limit::perMinute(5)->by('auth:'.mb_strtolower((string) $request->input('email'))),
+        ]);
         RateLimiter::for('messages', fn (Request $request) => Limit::perMinute(120)->by($request->user()?->id ?: $request->ip()));
     }
 }

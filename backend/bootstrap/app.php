@@ -20,6 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum', 'active']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Behind a load balancer or CDN the client IP comes from X-Forwarded-For; only trust the proxies you name.
+        if ($proxies = env('TRUSTED_PROXIES')) {
+            $middleware->trustProxies(at: $proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));
+        }
+
         $middleware->alias([
             'active' => EnsureUserIsActive::class,
             'admin' => EnsureUserIsAdmin::class,
