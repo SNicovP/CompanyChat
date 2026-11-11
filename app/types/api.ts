@@ -51,6 +51,9 @@ export interface ApiMessage {
   body: string
   created_at: string
   edited_at: string | null
+  reply_to: string | null
+  /** Enough of the quoted message to show a quote, even when it is older than the loaded page. */
+  reply_preview: { user_id: string | null; body: string; has_files: boolean } | null
   message_attachments?: ApiAttachment[]
 }
 

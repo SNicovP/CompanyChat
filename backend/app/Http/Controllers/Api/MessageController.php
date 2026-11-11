@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class MessageController extends Controller
@@ -40,7 +41,7 @@ class MessageController extends Controller
             'from' => ['nullable', 'uuid'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
         ]);
-        $query = $channel->messages()->with('attachments');
+        $query = $channel->messages()->with('attachments', 'replyTo.attachments');
 
         if (! empty($data['from'])) {
             $anchor = $channel->messages()->whereKey($data['from'])->firstOrFail();
@@ -73,6 +74,8 @@ class MessageController extends Controller
 
         $data = $request->validate([
             'body' => ['nullable', 'string', 'max:'.Message::MAX_BODY],
+            // the message being replied to, which must be in this same conversation
+            'reply_to' => ['nullable', 'uuid', Rule::exists('messages', 'id')->where('channel_id', $channel->id)],
             'files' => ['nullable', 'array', 'max:'.Attachments::MAX_FILES_PER_MESSAGE],
             'files.*' => ['file', 'max:'.(MessageAttachment::MAX_BYTES / 1024)],
         ]);
@@ -87,8 +90,8 @@ class MessageController extends Controller
         $written = [];
         $mentioned = [];
         try {
-            $message = DB::transaction(function () use ($channel, $user, $body, $files, $disk, &$written, &$mentioned) {
-                $message = Message::create(['channel_id' => $channel->id, 'user_id' => $user->id, 'body' => $body]);
+            $message = DB::transaction(function () use ($channel, $user, $body, $data, $files, $disk, &$written, &$mentioned) {
+                $message = Message::create(['channel_id' => $channel->id, 'user_id' => $user->id, 'body' => $body, 'reply_to' => $data['reply_to'] ?? null]);
                 foreach (array_values($files) as $i => $file) {
                     $name = $file->getClientOriginalName();
                     $path = "{$channel->id}/{$message->id}/{$i}_".Attachments::safeFileName($name);
@@ -156,6 +159,7 @@ class MessageController extends Controller
         abort_unless($message->user_id === $user->id || Access::canManageChannel($user, $channel), 403, 'You can only delete your own messages.');
 
         $paths = $message->attachments()->whereNull('deleted_at')->pluck('path')->all();
+        Message::query()->where('reply_to', $message->id)->update(['reply_to' => null]); // replies keep their text, lose the quote (SQLite has no such foreign key)
         $message->delete();
         if ($paths) {
             rescue(fn () => Attachments::disk()->delete($paths), report: true); // best effort

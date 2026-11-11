@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $id
  * @property string $channel_id
  * @property ?string $user_id
+ * @property ?string $reply_to
  * @property string $body
  */
 class Message extends Model
@@ -20,7 +21,7 @@ class Message extends Model
 
     public const MAX_BODY = 4000;
 
-    protected $fillable = ['channel_id', 'user_id', 'body'];
+    protected $fillable = ['channel_id', 'user_id', 'body', 'reply_to'];
 
     protected $hidden = ['body_tsv', 'updated_at'];
 
@@ -37,6 +38,12 @@ class Message extends Model
     public function channel(): BelongsTo
     {
         return $this->belongsTo(Channel::class);
+    }
+
+    /** The message this one replies to. */
+    public function replyTo(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reply_to');
     }
 
     public function user(): BelongsTo
