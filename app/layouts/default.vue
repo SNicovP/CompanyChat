@@ -75,6 +75,18 @@ function notificationState() {
   return onOff(notifier.active.value)
 }
 
+// Desktop app only: start CompanyChat (hidden in the tray) when you sign in to the computer.
+const desktop = desktopBridge()
+const launchAtLogin = ref<{ supported: boolean; on: boolean } | null>(null)
+onMounted(async () => {
+  launchAtLogin.value = (await desktop?.getLaunchAtLogin?.().catch(() => null)) ?? null
+})
+async function toggleLaunchAtLogin() {
+  if (!desktop?.setLaunchAtLogin || !launchAtLogin.value) return
+  const on = await desktop.setLaunchAtLogin(!launchAtLogin.value.on)
+  launchAtLogin.value = { ...launchAtLogin.value, on }
+}
+
 async function sendTest() {
   if (notifier.permission.value !== 'granted') {
     toast.add({
@@ -110,6 +122,9 @@ const items = computed(() => [
         { label: `Notification sound: ${onOff(notifier.prefs.value.sound)}`, icon: 'i-lucide-volume-2', onSelect: () => notifier.set('sound', !notifier.prefs.value.sound) },
         { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: togglePreview },
       ]]
+    : []),
+  ...(launchAtLogin.value?.supported
+    ? [[{ label: `Start at login: ${onOff(launchAtLogin.value.on)}`, icon: 'i-lucide-power', onSelect: toggleLaunchAtLogin }]]
     : []),
   ...(installer.canInstall.value ? [[{ label: 'Install app', icon: 'i-lucide-download', onSelect: installer.install }]] : []),
   ...(store.isAdmin ? [[{ label: 'Manage users', icon: 'i-lucide-shield', to: '/admin/users' }]] : []),

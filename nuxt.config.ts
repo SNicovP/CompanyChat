@@ -34,6 +34,9 @@ export default defineNuxtConfig({
   },
 
   supabase: {
+    // Send the realtime heartbeat from a Web Worker: background tabs and the hidden desktop window throttle
+    // normal timers, the heartbeat goes late, the socket drops and live messages (and their notifications) are missed.
+    clientOptions: { realtime: { worker: true } },
     redirectOptions: {
       login: '/login',
       callback: '/confirm',

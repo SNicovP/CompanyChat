@@ -171,6 +171,13 @@ cannot reach localhost); test on the live site.
 
 `desktop/` is a thin Electron shell that loads the live site, so every deploy reaches the desktop app automatically (no separate release needed for web changes). It adds a Dock/taskbar badge with your unread count, keeps running when the window is closed (notifications keep arriving), opens external links in your browser, and shows a retry page when offline. Background Web Push is not used in the desktop app (the app itself stays running instead), so "Notify when the app is closed" is hidden there.
 
+How it stays reliable in the background:
+- The window keeps running at full speed while hidden (`backgroundThrottling: false`), and the Supabase realtime heartbeat runs in a Web Worker (`clientOptions.realtime.worker`), so the live connection is not dropped while the app sits in the tray.
+- **Start at login** is on by default for installed builds and starts the app hidden in the tray. Toggle it in the tray menu (Windows/Linux) or the user menu ("Start at login").
+- After sleep or a dropped connection, the app reloads the unread counts and shows one summary notification for the DMs, mentions and watched channels that arrived meanwhile.
+- Windows: the app sets its AppUserModelID (`africa.ncloud.companychat`, same as `build.appId`) so toasts show reliably, and puts a red dot on the taskbar button while there is anything unread.
+- If notifications still don't appear, check Windows Focus Assist / Do not disturb or macOS Focus, and the OS notification settings for CompanyChat.
+
 ```bash
 cd desktop
 npm install
