@@ -90,4 +90,53 @@ class PushAndBroadcastTest extends TestCase
         $auth('private-user.'.User::factory()->create()->id)->assertForbidden();
         $auth('presence-office')->assertOk()->assertJsonPath('channel_data', fn ($d) => str_contains($d, $member->id));
     }
+
+    public function test_user_auth_signs_the_socket_in_as_the_caller(): void
+    {
+        config(['broadcasting.default' => 'reverb', 'broadcasting.connections.reverb.key' => 'k', 'broadcasting.connections.reverb.secret' => 's', 'broadcasting.connections.reverb.app_id' => '1']);
+        Broadcast::purge('reverb');
+        ['member' => $member] = $this->office();
+
+        $this->postJson('/api/broadcasting/user-auth', ['socket_id' => '1.1'])->assertUnauthorized();
+        $res = $this->actingAs($member)->postJson('/api/broadcasting/user-auth', ['socket_id' => '1.1'])->assertOk();
+        $this->assertSame(['id' => $member->id], json_decode($res->json('user_data'), true));
+        $this->assertStringStartsWith('k:', $res->json('auth'));
+    }
+
+    public function test_access_changes_close_the_users_open_sockets(): void
+    {
+        ['member' => $member, 'admin' => $admin, 'public' => $public] = $this->office();
+        $closed = [];
+        $pusher = new class($closed) {
+            public function __construct(public array &$closed) {}
+
+            public function terminateUserConnections(string $id): void
+            {
+                $this->closed[] = $id;
+            }
+        };
+        $fake = new class($pusher) extends \Illuminate\Broadcasting\Broadcasters\NullBroadcaster {
+            public function __construct(private $pusher) {}
+
+            public function getPusher()
+            {
+                return $this->pusher;
+            }
+        };
+        Broadcast::swap(new class($fake) extends \Illuminate\Broadcasting\BroadcastManager {
+            public function __construct(private $fake) {}
+
+            public function connection($name = null)
+            {
+                return $this->fake;
+            }
+        });
+
+        $this->actingAs($admin)->deleteJson("/api/channels/{$public->id}/members/{$member->id}")->assertOk();
+        $this->assertContains($member->id, $closed);
+
+        $closed = [];
+        $this->actingAs($admin)->postJson("/api/admin/users/{$member->id}/deactivate")->assertOk();
+        $this->assertSame([$member->id], $closed);
+    }
 }

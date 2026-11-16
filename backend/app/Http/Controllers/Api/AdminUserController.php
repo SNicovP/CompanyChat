@@ -111,6 +111,7 @@ class AdminUserController extends Controller
         $user->save();
         if (! $active) {
             $user->tokens()->delete(); // signed out everywhere, right now
+            Realtime::disconnect($user->id);
         }
         Realtime::send(new ProfileUpdated($user));
 

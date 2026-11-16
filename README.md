@@ -39,9 +39,11 @@ Requires Node ^22.21 || ^24.11 || >=26 (Nuxt 4) and PHP 8.3+ for the backend.
   access rules as reads). Authors can edit/delete their own; admins can delete any message in a project.
 
 ## Resetting for go-live
-Wipe test content but keep the schema and users (Postgres):
+Wipe test content but keep the schema and users (MySQL):
 ```sql
-truncate messages, channel_members, channels, client_members, clients cascade;
+SET FOREIGN_KEY_CHECKS=0;
+TRUNCATE messages; TRUNCATE channel_members; TRUNCATE channels; TRUNCATE client_members; TRUNCATE clients;
+SET FOREIGN_KEY_CHECKS=1;
 ```
 `php artisan migrate:fresh` also deletes users; then run `php artisan chat:create-super-admin` again.
 
@@ -91,8 +93,8 @@ Hover your own message and click the pencil, or press Up in an empty composer to
 
 ## Deploying (Laravel Forge)
 
-**API** (`backend/`): a normal Laravel site in Forge with PostgreSQL (needed for the full-text search index), web
-directory `backend/public`. Add two daemons, `php artisan reverb:start` and `php artisan queue:work`, and put Reverb
+**API** (`backend/`): a normal Laravel site in Forge with MySQL 8, web
+directory `backend/public` (zero-downtime deploys: see the backend README). Add two daemons, `php artisan reverb:start` and `php artisan queue:work`, and put Reverb
 behind TLS (Forge's Reverb integration or an Nginx `wss://` proxy). Set `FRONTEND_URL` to the app's URL and configure
 `MAIL_*`. After the first deploy run `php artisan chat:create-super-admin`, or import the old data with
 `php artisan chat:import-supabase` (see the backend README).
@@ -111,8 +113,7 @@ Desktop notifications need HTTPS, which the live site has.
 ## Search
 
 `Cmd/Ctrl+K` (or the sidebar button) searches messages. `GET /api/search?q=` is a word-prefix full-text
-search (`simple` config, all words must match, newest first, max 100) over a generated `body_tsv` column with a GIN
-index on Postgres. It only looks in channels you can open: private channels you are not in and other people's DMs
+search (all words must match, newest first, max 100) using `LIKE` matching, which is instant at office scale. It only looks in channels you can open: private channels you are not in and other people's DMs
 never appear. Mention tokens are excluded from the index. Clicking a result opens
 the channel at `?m=<message id>`, scrolls to that message (loading older history if needed) and highlights it for a few seconds.
 
