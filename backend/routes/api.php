@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AttachmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChannelController;
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\ProfileController;
@@ -92,6 +93,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('push-subscriptions', [PushSubscriptionController::class, 'store']);
     Route::patch('push-subscriptions', [PushSubscriptionController::class, 'update']);
     Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy']);
+    Route::post('device-tokens', [DeviceTokenController::class, 'store']);
+    Route::patch('device-tokens', [DeviceTokenController::class, 'update']);
+    Route::delete('device-tokens', [DeviceTokenController::class, 'destroy']);
 
     Route::prefix('admin/users')->middleware('admin')->group(function () {
         Route::get('/', [AdminUserController::class, 'index']);

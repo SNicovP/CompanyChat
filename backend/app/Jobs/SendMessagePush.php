@@ -2,9 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Models\DeviceToken;
 use App\Models\Message;
 use App\Models\PushSubscription;
 use App\Models\User;
+use App\Support\Fcm;
 use App\Support\PushMessage;
 use App\Support\PushTargets;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -28,7 +30,9 @@ class SendMessagePush implements ShouldQueue
     public function handle(): void
     {
         $config = config('services.webpush');
-        if (empty($config['public_key']) || empty($config['private_key']) || empty($config['subject'])) {
+        $web = ! empty($config['public_key']) && ! empty($config['private_key']) && ! empty($config['subject']);
+        $fcm = Fcm::configured();
+        if (! $web && ! $fcm) {
             return; // push is not configured
         }
 
@@ -41,14 +45,51 @@ class SendMessagePush implements ShouldQueue
         if (! $targets) {
             return;
         }
-        $subs = PushSubscription::query()->whereIn('user_id', array_keys($targets))->get();
-        if ($subs->isEmpty()) {
-            return;
-        }
 
         $names = User::query()->pluck('display_name', 'id');
         $nameOf = fn (string $id) => $names[$id] ?? 'Unknown';
         $sender = $message->user_id ? $nameOf($message->user_id) : 'Someone';
+        $note = fn (string $userId, bool $preview) => PushMessage::build(
+            $targets[$userId],
+            $message->channel_id,
+            $message->channel->kind->value,
+            $message->channel->name,
+            $sender,
+            $message->body,
+            $preview,
+            $nameOf,
+        );
+
+        if ($web) {
+            $this->sendWeb($config, $targets, $note);
+        }
+        if ($fcm) {
+            $this->sendFcm($targets, $note);
+        }
+    }
+
+    private function sendFcm(array $targets, callable $note): void
+    {
+        $dead = [];
+        foreach (DeviceToken::query()->whereIn('user_id', array_keys($targets))->get() as $device) {
+            $result = Fcm::send($device->token, $note($device->user_id, $device->show_preview));
+            if ($result === 'invalid') {
+                $dead[] = $device->token_hash; // app uninstalled or token rotated: forget it
+            } elseif ($result === 'error') {
+                Log::warning('fcm push failed', ['device' => $device->id]);
+            }
+        }
+        if ($dead) {
+            DeviceToken::query()->whereIn('token_hash', $dead)->delete();
+        }
+    }
+
+    private function sendWeb(array $config, array $targets, callable $note): void
+    {
+        $subs = PushSubscription::query()->whereIn('user_id', array_keys($targets))->get();
+        if ($subs->isEmpty()) {
+            return;
+        }
 
         $webPush = new WebPush(['VAPID' => [
             'subject' => $config['subject'],
@@ -57,19 +98,9 @@ class SendMessagePush implements ShouldQueue
         ]], ['TTL' => 3600, 'urgency' => 'high']);
 
         foreach ($subs as $sub) {
-            $note = PushMessage::build(
-                $targets[$sub->user_id],
-                $message->channel_id,
-                $message->channel->kind->value,
-                $message->channel->name,
-                $sender,
-                $message->body,
-                $sub->show_preview,
-                $nameOf,
-            );
             $webPush->queueNotification(
                 Subscription::create(['endpoint' => $sub->endpoint, 'keys' => ['p256dh' => $sub->p256dh, 'auth' => $sub->auth]]),
-                json_encode($note),
+                json_encode($note($sub->user_id, $sub->show_preview)),
             );
         }
 
