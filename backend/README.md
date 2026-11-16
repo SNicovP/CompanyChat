@@ -82,7 +82,7 @@ Every request other than `/api/auth/*`, `/api/files/*` and `/api/push/public-key
 | POST | `/api/auth/reset-password` | `email, token, password` | from `FRONTEND_URL/reset-password?token=&email=`; → `{ token, user }` |
 | GET | `/api/me` | | your profile (with email) |
 | PATCH | `/api/me` | `display_name?, avatar_url?, status?` | `status`: `online \| away \| busy \| dnd` |
-| PUT | `/api/me/password` | `password` | signs out your other devices |
+| PUT | `/api/me/password` | `current_password, password` | signs out your other devices |
 
 ## Endpoints
 
@@ -167,6 +167,11 @@ const echo = new Echo({
 For the sidebar's unread badges (the old `messages-all` subscription), subscribe to `private-channel.{id}` for every
 channel from `GET /api/channels`; one socket carries them all. Messages arrive with their attachments, so there is
 no separate attachment event any more.
+
+Access is checked when a client subscribes, so the API closes a user's open sockets when they are deactivated, removed
+from a client or project, or a project/client they are in is archived (`Realtime::disconnect`, Reverb's
+`terminate_connections`). The app signs each socket in with `POST /api/broadcasting/user-auth` so Reverb knows whose
+it is; on reconnect the channel authorisation refuses anything they can no longer see.
 
 If Reverb is down, writes still succeed (the broadcast failure is logged); clients should refetch on reconnect, as
 the app already does on wake/reconnect.

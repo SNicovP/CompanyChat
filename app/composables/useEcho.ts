@@ -28,7 +28,19 @@ export function useEcho(): Echo<'reverb'> {
           .catch((e) => callback(e instanceof Error ? e : new Error(String(e)), null))
       },
     }),
-  })
+    // Signing in ties this socket to the user, so the API can close it when they are deactivated or lose access.
+    userAuthentication: {
+      customHandler: (
+        { socketId }: { socketId: string },
+        callback: (error: Error | null, data: { auth: string; user_data: string } | null) => void,
+      ) => {
+        useApi()<{ auth: string; user_data: string }>('/broadcasting/user-auth', { method: 'POST', body: { socket_id: socketId } })
+          .then((data) => callback(null, data))
+          .catch((e) => callback(e instanceof Error ? e : new Error(String(e)), null))
+      },
+    },
+  } as unknown as ConstructorParameters<typeof Echo<'reverb'>>[0])
+  ;(echo.connector as unknown as { pusher: Pusher }).pusher.signin()
   return echo
 }
 

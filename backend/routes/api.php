@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\PushSubscriptionController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WatchController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
 
 // ---------------------------------------------------------------- public
@@ -30,6 +32,18 @@ Route::get('push/public-key', [PushSubscriptionController::class, 'publicKey']);
 
 // --------------------------------------------------------- signed in
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
+    // Pusher "sign in": ties the websocket to the user so Reverb can disconnect them (see Realtime::disconnect).
+    Route::post('broadcasting/user-auth', function (Request $request) {
+        $request->validate(['socket_id' => ['required', 'string']]);
+        $broadcaster = Broadcast::connection();
+        abort_unless(method_exists($broadcaster, 'getPusher'), 404);
+
+        return response()->json(json_decode($broadcaster->getPusher()->authenticateUser(
+            $request->input('socket_id'),
+            ['id' => (string) $request->user()->id],
+        ), true));
+    });
+
     Route::post('auth/logout', [AuthController::class, 'logout']);
 
     Route::get('me', [ProfileController::class, 'show']);

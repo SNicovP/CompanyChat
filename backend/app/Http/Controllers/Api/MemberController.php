@@ -106,6 +106,7 @@ class MemberController extends Controller
     private function remove(BelongsToMany $members, User $user): JsonResponse
     {
         $members->detach($user->id);
+        Realtime::disconnect($user->id);
         Realtime::send(new DirectoryChanged);
 
         return response()->json(['ok' => true]);

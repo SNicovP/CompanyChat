@@ -70,6 +70,9 @@ class ClientController extends Controller
         $client->archived_at = $data['archived'] ? now() : null;
         $client->save();
         Realtime::send(new DirectoryChanged);
+        if ($data['archived']) {
+            Realtime::disconnect(...$client->members()->pluck('users.id')->all());
+        }
 
         return new ClientResource($client);
     }

@@ -100,6 +100,14 @@ class ChannelController extends Controller
         $channel->archived_at = $data['archived'] ? now() : null;
         $channel->save();
         Realtime::send(new DirectoryChanged);
+        if ($data['archived']) {
+            // Open sockets keep their subscription until closed; reconnecting re-checks access.
+            $ids = $channel->members()->pluck('users.id');
+            if (! $channel->is_private && $channel->client) {
+                $ids = $ids->merge($channel->client->members()->pluck('users.id'));
+            }
+            Realtime::disconnect(...$ids->all());
+        }
 
         return new ChannelResource($channel->load('members:id'));
     }
