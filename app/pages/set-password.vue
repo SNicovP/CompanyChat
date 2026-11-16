@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { errorMessage as errorText } from '~/utils/errors'
+
 definePageMeta({ layout: 'blank' })
 
-const supabase = useSupabaseClient()
+const api = useApi()
+const current = ref('')
 const password = ref('')
 const confirm = ref('')
 const loading = ref(false)
@@ -12,10 +15,14 @@ async function save() {
   if (password.value.length < 8) return void (errorMessage.value = 'Use at least 8 characters.')
   if (password.value !== confirm.value) return void (errorMessage.value = 'The passwords do not match.')
   loading.value = true
-  const { error } = await supabase.auth.updateUser({ password: password.value })
-  loading.value = false
-  if (error) errorMessage.value = error.message
-  else await navigateTo('/')
+  try {
+    await api('/me/password', { method: 'PUT', body: { current_password: current.value, password: password.value } })
+    await navigateTo('/')
+  } catch (e) {
+    errorMessage.value = errorText(e)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -23,9 +30,12 @@ async function save() {
   <div class="flex min-h-screen items-center justify-center p-4">
     <UCard class="w-full max-w-sm">
       <template #header>
-        <h1 class="text-xl font-semibold">Choose your password</h1>
+        <h1 class="text-xl font-semibold">Change your password</h1>
       </template>
       <form class="space-y-4" @submit.prevent="save">
+        <UFormField label="Current password">
+          <UInput v-model="current" type="password" autocomplete="current-password" required class="w-full" />
+        </UFormField>
         <UFormField label="New password">
           <UInput v-model="password" type="password" autocomplete="new-password" required class="w-full" />
         </UFormField>
