@@ -30,7 +30,7 @@ class ImportFromSupabaseTest extends TestCase
         $src->statement('create table push_subscriptions (id text, user_id text, endpoint text, p256dh text, auth text, show_preview int, user_agent text, created_at text)');
 
         [$u, $cl, $ch, $m, $a] = [Str::uuid(), Str::uuid(), Str::uuid(), Str::uuid(), Str::uuid()];
-        $ts = '2026-11-01 10:00:00';
+        $ts = '2026-11-01 12:00:00.123456+02'; // Postgres timestamptz text, as the pgsql driver returns it
         $src->table('auth.users')->insert(['id' => $u, 'encrypted_password' => '$2a$'.substr(password_hash('hunter22', PASSWORD_BCRYPT), 4), 'email_confirmed_at' => $ts, 'last_sign_in_at' => $ts]);
         $src->table('profiles')->insert(['id' => $u, 'email' => 'Boss@Example.com', 'display_name' => 'Boss', 'app_role' => 'super_admin', 'status' => 'online', 'is_active' => 1, 'created_at' => $ts]);
         $src->table('clients')->insert(['id' => $cl, 'name' => 'Acme', 'created_by' => $u, 'created_at' => $ts]);
@@ -46,6 +46,9 @@ class ImportFromSupabaseTest extends TestCase
         $this->artisan('chat:import-supabase', ['--connection' => 'supabase_test', '--files' => $files])->assertSuccessful();
 
         $this->assertDatabaseHas('messages', ['id' => $m, 'body' => 'hello']);
+        // converted to UTC, not zeroed or shifted
+        $this->assertSame('2026-11-01 10:00:00', \App\Models\Message::find($m)->created_at->utc()->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-11-01 10:00:00', User::find($u)->last_sign_in_at->utc()->format('Y-m-d H:i:s'));
         Storage::disk('attachments')->assertExists("{$ch}/{$m}/0_a.txt");
         $this->postJson('/api/auth/login', ['email' => 'boss@example.com', 'password' => 'hunter22'])->assertOk();
         $this->assertSame('super_admin', User::find($u)->app_role->value);

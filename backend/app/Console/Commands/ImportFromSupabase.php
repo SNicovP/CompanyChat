@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\Attachments;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
@@ -88,9 +89,9 @@ class ImportFromSupabase extends Command
             'status' => $r->status,
             'is_active' => (bool) $r->is_active,
             'password' => self::bcrypt($r->encrypted_password),
-            'joined_at' => ($r->email_confirmed_at && $r->encrypted_password) || $r->last_sign_in_at ? ($r->email_confirmed_at ?? $r->last_sign_in_at) : null,
-            'last_sign_in_at' => $r->last_sign_in_at,
-            'created_at' => $r->created_at,
+            'joined_at' => self::utc(($r->email_confirmed_at && $r->encrypted_password) || $r->last_sign_in_at ? ($r->email_confirmed_at ?? $r->last_sign_in_at) : null),
+            'last_sign_in_at' => self::utc($r->last_sign_in_at),
+            'created_at' => self::utc($r->created_at),
             'updated_at' => now(),
         ])->all();
 
@@ -98,6 +99,19 @@ class ImportFromSupabase extends Command
             DB::table('users')->upsert($chunk, ['id']);
         }
         $this->line(sprintf('  users: %d', count($users)));
+    }
+
+    /**
+     * Postgres hands timestamps over as "2026-11-10 08:15:22.123456+00". MySQL rejects that offset (and INSERT IGNORE
+     * silently turns it into 0000-00-00), so convert every timestamp to plain UTC "Y-m-d H:i:s.u" first.
+     */
+    public static function utc(mixed $value): mixed
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return $value;
+        }
+
+        return Carbon::parse($value, 'UTC')->utc()->format('Y-m-d H:i:s.u');
     }
 
     /** Go's $2a$ bcrypt is identical to PHP's $2y$, but Laravel only accepts the $2y$ prefix. */
@@ -118,6 +132,11 @@ class ImportFromSupabase extends Command
         $source->table($table)->select($columns)->orderBy($columns[0])->chunk(1000, function ($rows) use ($table, $hasUpdatedAt, &$count) {
             $batch = $rows->map(function ($r) use ($table, $hasUpdatedAt) {
                 $row = (array) $r;
+                foreach ($row as $column => $value) {
+                    if (str_ends_with($column, '_at')) {
+                        $row[$column] = self::utc($value);
+                    }
+                }
                 if ($table === 'push_subscriptions') {
                     $row['endpoint_hash'] = hash('sha256', $row['endpoint']);
                 }
