@@ -42,4 +42,27 @@ class ReadReceiptTest extends TestCase
 
         Event::assertDispatched(ChannelRead::class, fn ($e) => $e->channelId === $dm->id && $e->userId === $b->id);
     }
+
+    public function test_the_read_marker_never_moves_backwards(): void
+    {
+        $a = User::factory()->create();
+        $b = User::factory()->create();
+        $dm = Channel::factory()->dm()->create();
+        $dm->members()->attach([$a->id, $b->id]);
+        $marker = fn () => \Illuminate\Support\Facades\DB::table('channel_reads')->where(['user_id' => $b->id, 'channel_id' => $dm->id])->value('last_read_at');
+
+        \Illuminate\Support\Carbon::setTestNow('2026-11-17 10:00:05.500000');
+        $this->actingAs($b)->postJson("/api/channels/{$dm->id}/read")->assertOk();
+        $newer = $marker();
+
+        // an older request that finishes late (opened the chat, but was slower than the message-arrived one)
+        \Illuminate\Support\Carbon::setTestNow('2026-11-17 10:00:04.100000');
+        $this->actingAs($b)->postJson("/api/channels/{$dm->id}/read")->assertOk();
+        $this->assertSame($newer, $marker());
+
+        \Illuminate\Support\Carbon::setTestNow('2026-11-17 10:00:09.000000');
+        $this->actingAs($b)->postJson("/api/channels/{$dm->id}/read")->assertOk();
+        $this->assertGreaterThan($newer, $marker());
+        \Illuminate\Support\Carbon::setTestNow();
+    }
 }
