@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ContextMenuItem } from '@nuxt/ui'
 import type { ApiAttachment, ApiMessage, ApiShare } from '~/types/api'
 import { namesSummary } from '~/utils/mesh'
 import { webrtcSupported } from '~/utils/peer'
@@ -568,6 +569,31 @@ async function remove(m: Message) {
   }
 }
 
+async function copyText(m: Message) {
+  try {
+    await navigator.clipboard.writeText(tokensToDisplay(m.body, (id) => chat.userName(id)).text)
+    toast.add({ title: 'Copied', icon: 'i-lucide-copy', duration: 1500 })
+  } catch (error) {
+    toast.add({ title: 'Could not copy', description: errorMessage(error), color: 'error' })
+  }
+}
+
+// Right-click (or long-press on touch) menu on a message: the same actions as the hover toolbar, plus copy.
+function messageMenu(m: Message) {
+  const items: ContextMenuItem[] = []
+  if (!readOnly.value) items.push({ label: 'Reply', icon: 'i-lucide-reply', onSelect: () => startReply(m) })
+  if (m.body) items.push({ label: 'Copy text', icon: 'i-lucide-copy', onSelect: () => copyText(m) })
+  if (m.user_id === chat.myId) {
+    items.push({ label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => startEdit(m) })
+    items.push({ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove(m) })
+  }
+  return items
+}
+
+// Let the browser's own menu through where it is more useful: in the edit box, on a link, or over selected text.
+const nativeMenuTarget = (e: Event) =>
+  !!(e.target as HTMLElement | null)?.closest('a, textarea, input') || !!window.getSelection()?.toString()
+
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { timeStyle: 'short' })
 
 function dayLabel(iso: string) {
@@ -772,10 +798,12 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           <div v-if="r.newDay" class="flex items-center gap-3 py-3 text-xs font-medium text-muted">
             <span class="h-px flex-1 bg-accented" />{{ r.dayLabel }}<span class="h-px flex-1 bg-accented" />
           </div>
+          <UContextMenu :items="messageMenu(r.m)" :disabled="!!r.m.pending || editingId === r.m.id">
           <div
             :data-message-id="r.m.id"
-            tabindex="0" class="group relative flex gap-3 rounded-md px-2 py-0.5 outline-none transition-colors duration-700 hover:bg-muted/70"
+            tabindex="0" class="group relative flex gap-3 rounded-md px-2 py-0.5 outline-none transition-colors duration-700 hover:bg-muted/70 data-[state=open]:bg-muted/70"
             :class="[r.grouped ? '' : 'mt-3 first:mt-0', mentionsMe(r.m) ? 'border-l-2 border-primary bg-primary/5' : '', highlightId === r.m.id ? 'bg-primary/20!' : '', r.m.pending ? 'opacity-60' : '']"
+            @contextmenu.capture="nativeMenuTarget($event) && $event.stopPropagation()"
           >
             <div class="w-9 shrink-0 pt-0.5">
               <UserAvatar v-if="!r.grouped" :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
@@ -856,6 +884,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               />
             </div>
           </div>
+          </UContextMenu>
         </template>
         <TypingBubble v-if="typingNames.length" :names="typingNames" />
       </div>
