@@ -28,3 +28,15 @@
 .desktop-mac .app-header [role='menu'] {
   -webkit-app-region: no-drag;
 }
+
+/* "Someone is typing…" bubble: three dots that rise one after the other. */
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+.typing-dot {
+  animation: typing-dot 1.2s infinite ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot { animation: none; }
+}
