@@ -112,15 +112,21 @@ const items = computed(() => [
     label: s.label,
     onSelect: () => store.setStatus(s.value).catch(() => toast.add({ title: 'Could not update status', color: 'error' })),
   })),
-  ...(notifier.supported.value
-    ? [[
-        { label: `Desktop notifications: ${notificationState()}`, icon: 'i-lucide-bell', onSelect: toggleNotifications },
-        { label: 'Send a test notification', icon: 'i-lucide-bell-ring', onSelect: sendTest },
-        ...(push.supported.value ? [{ label: `Notify when the app is closed: ${onOff(push.active.value)}`, icon: 'i-lucide-bell-dot', onSelect: togglePush }] : []),
-        { label: `Notification sounds: ${onOff(notifier.prefs.value.sound)}…`, icon: 'i-lucide-volume-2', onSelect: () => { soundsOpen.value = true } },
-        { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: togglePreview },
-      ]]
-    : []),
+  // The Android app's WebView has no Notification API (it uses native push), so only the browser-notification
+  // items depend on it; sounds play in the open app everywhere.
+  [
+    ...(notifier.supported.value
+      ? [
+          { label: `Desktop notifications: ${notificationState()}`, icon: 'i-lucide-bell', onSelect: toggleNotifications },
+          { label: 'Send a test notification', icon: 'i-lucide-bell-ring', onSelect: sendTest },
+        ]
+      : []),
+    ...(push.supported.value ? [{ label: `Notify when the app is closed: ${onOff(push.active.value)}`, icon: 'i-lucide-bell-dot', onSelect: togglePush }] : []),
+    { label: `Notification sounds: ${onOff(notifier.prefs.value.sound)}…`, icon: 'i-lucide-volume-2', onSelect: () => { soundsOpen.value = true } },
+    ...(notifier.supported.value || push.supported.value
+      ? [{ label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: togglePreview }]
+      : []),
+  ],
   ...(launchAtLogin.value?.supported
     ? [[{ label: `Start at login: ${onOff(launchAtLogin.value.on)}`, icon: 'i-lucide-power', onSelect: toggleLaunchAtLogin }]]
     : []),
