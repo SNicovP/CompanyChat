@@ -131,7 +131,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
             :key="p.id"
             :to="`/c/${p.id}`"
             class="flex items-center gap-2.5 rounded-md py-1.5 pl-9 pr-2 text-base"
-            :class="activeId === p.id ? 'bg-primary font-medium text-inverted' : chat.unread[p.id] ? 'font-bold text-highlighted hover:bg-accented/60' : 'text-toned hover:bg-accented/60 hover:text-highlighted'"
+            :class="activeId === p.id ? 'bg-accented font-semibold text-highlighted' : chat.unread[p.id] ? 'font-bold text-highlighted hover:bg-accented/60' : 'text-toned hover:bg-accented/60 hover:text-highlighted'"
           >
             <UIcon :name="p.is_private ? 'i-lucide-lock' : 'i-lucide-hash'" class="size-4 shrink-0" />
             <span class="truncate">{{ p.name }}</span>
@@ -163,7 +163,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
           :key="dm.id"
           :to="`/c/${dm.id}`"
           class="flex items-center gap-2.5 rounded-md py-1.5 pl-8 pr-2 text-base"
-          :class="activeId === dm.id ? 'bg-primary font-medium text-inverted' : chat.unread[dm.id] ? 'font-bold text-highlighted hover:bg-accented/60' : 'text-toned hover:bg-accented/60 hover:text-highlighted'"
+          :class="activeId === dm.id ? 'bg-accented font-semibold text-highlighted' : chat.unread[dm.id] ? 'font-bold text-highlighted hover:bg-accented/60' : 'text-toned hover:bg-accented/60 hover:text-highlighted'"
         >
           <UserAvatar :name="chat.channelTitle(dm)" :status="chat.displayStatus(chat.otherUser(dm)?.id)" size="sm" />
           <span class="truncate">{{ chat.channelTitle(dm) }}</span>

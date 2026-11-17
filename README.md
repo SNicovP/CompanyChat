@@ -38,6 +38,11 @@ Requires Node ^22.21 || ^24.11 || >=26 (Nuxt 4) and PHP 8.3+ for the backend.
 - Messages load the latest 100 and update live over Reverb (private channel per conversation, authorised with the same
   access rules as reads). Authors can edit/delete their own; admins can delete any message in a project.
 
+- Your own messages show ticks: one = saved on the server, two (blue) = someone else has opened the chat since
+  (`channel_reads`, `GET /api/channels/{id}/reads`, live via the `channel.read` event). In a project it means at least one other person.
+- "X is typing…" uses Reverb client events (whispers, nothing stored) and expires 3 seconds after the last signal.
+- Unsent text is kept per chat on this device (localStorage), so switching chats or reloading never loses a draft.
+
 ## Resetting for go-live
 Wipe test content but keep the schema and users (MySQL):
 ```sql

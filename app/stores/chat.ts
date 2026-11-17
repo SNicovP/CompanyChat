@@ -7,10 +7,15 @@ export interface ArchivedProject { id: string; name: string | null; client_id: s
 export type DirectoryUser = Pick<ApiUser, 'id' | 'display_name' | 'status' | 'app_role' | 'is_active'>
 
 /** Live events of one channel (Reverb private-channel.{id}), passed on to whoever shows that channel. */
+/** How long "typing…" lingers after the last keystroke signal, and how often we send one. */
+export const TYPING_MS = 3000
+export const TYPING_SEND_MS = 2000
+
 export type ChannelEvent =
   | { type: 'created'; message: ApiMessage }
   | { type: 'updated'; message: ApiMessage }
   | { type: 'deleted'; id: string; channel_id: string }
+  | { type: 'read'; channel_id: string; user_id: string; read_at: string }
 export interface Channel {
   id: string
   kind: 'project' | 'dm'
@@ -243,6 +248,42 @@ export const useChatStore = defineStore('chat', () => {
     return () => channelListeners.delete(fn)
   }
 
+  // "Typing…": other people whisper to the channel while they type; each entry expires TYPING_MS after the last signal.
+  const typing = ref<Record<string, string[]>>({})
+  const typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const lastTypingSent: Record<string, number> = {}
+
+  function clearTyping(channelId: string, userId: string) {
+    const key = `${channelId}:${userId}`
+    clearTimeout(typingTimers.get(key))
+    typingTimers.delete(key)
+    if (typing.value[channelId]?.includes(userId)) {
+      typing.value = { ...typing.value, [channelId]: typing.value[channelId].filter((u) => u !== userId) }
+    }
+  }
+
+  function hearTyping(channelId: string, userId: string) {
+    if (!userId || userId === myId.value) return
+    const key = `${channelId}:${userId}`
+    clearTimeout(typingTimers.get(key))
+    typingTimers.set(key, setTimeout(() => clearTyping(channelId, userId), TYPING_MS))
+    if (!typing.value[channelId]?.includes(userId)) {
+      typing.value = { ...typing.value, [channelId]: [...(typing.value[channelId] ?? []), userId] }
+    }
+  }
+
+  /** Tell the others we are typing (at most every TYPING_SEND_MS). Nothing is stored on the server. */
+  function sendTyping(channelId: string) {
+    const now = Date.now()
+    if (!subscribed.has(channelId) || now - (lastTypingSent[channelId] ?? 0) < TYPING_SEND_MS) return
+    lastTypingSent[channelId] = now
+    try {
+      useEcho().private(`channel.${channelId}`).whisper('typing', { user_id: myId.value })
+    } catch {
+      // not connected: the indicator is a nicety
+    }
+  }
+
   function emit(e: ChannelEvent) {
     for (const fn of channelListeners) fn(e)
   }
@@ -258,7 +299,10 @@ export const useChatStore = defineStore('chat', () => {
     for (const id of wanted) {
       if (subscribed.has(id)) continue
       echo.private(`channel.${id}`)
+        .listenForWhisper('typing', (e: { user_id: string }) => hearTyping(id, e.user_id))
+        .listen('.channel.read', (e: { channel_id: string; user_id: string; read_at: string }) => emit({ type: 'read', ...e }))
         .listen('.message.created', (e: { message: ApiMessage }) => {
+          if (e.message.user_id) clearTyping(id, e.message.user_id) // their message arrived: no longer typing
           emit({ type: 'created', message: e.message })
           onIncomingMessage(e.message)
         })
@@ -318,6 +362,9 @@ export const useChatStore = defineStore('chat', () => {
       for (const id of subscribed) echo.leave(`channel.${id}`)
     }
     subscribed = new Set()
+    for (const t of typingTimers.values()) clearTimeout(t)
+    typingTimers.clear()
+    typing.value = {}
     stopConnected?.()
     stopConnected = null
     if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
@@ -367,5 +414,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, createClient, createProject, setProjectArchived, setClientArchived, archivedClients, archivedProjects, startDm, reset, onChannelEvent }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, typing, sendTyping, createClient, createProject, setProjectArchived, setClientArchived, archivedClients, archivedProjects, startDm, reset, onChannelEvent }
 })

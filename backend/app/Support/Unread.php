@@ -14,13 +14,17 @@ use Illuminate\Support\Facades\DB;
  */
 class Unread
 {
-    public static function markRead(User $user, string $channelId): void
+    /** Returns the new marker (UTC ISO 8601), so callers can tell others how far this person has read. */
+    public static function markRead(User $user, string $channelId): string
     {
+        $now = now();
         DB::table('channel_reads')->upsert(
-            [['user_id' => $user->id, 'channel_id' => $channelId, 'last_read_at' => now()->format('Y-m-d H:i:s.u')]],
+            [['user_id' => $user->id, 'channel_id' => $channelId, 'last_read_at' => $now->format('Y-m-d H:i:s.u')]],
             ['user_id', 'channel_id'],
             ['last_read_at'],
         );
+
+        return $now->utc()->format('Y-m-d\TH:i:s.u\Z');
     }
 
     /** @return array{unread: array<string, int>, mentions: array<string, int>} only channels with a count > 0 */
