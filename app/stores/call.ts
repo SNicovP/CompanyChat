@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import type { ApiCall } from '~/types/api'
 import { CALL_AUDIO, CallPeer, NETWORK_HINT, endedNotice, webrtcSupported, type Signal } from '~/utils/peer'
-import { RINGBACK, RINGTONE, RING_REPEAT_MS, playNotes, type Note } from '~/utils/tones'
+import { RINGBACK, RING_REPEAT_MS, playNotes, type Note } from '~/utils/tones'
 
 /**
  * 1:1 voice calls. The API rings the other person and keeps the call's state (private-user.{id}: call.invited,
@@ -39,6 +39,8 @@ export const useCallStore = defineStore('call', () => {
   const api = useApi()
   const auth = useAuth()
   const config = useRuntimeConfig()
+  const notifier = useNotifier()
+  const customSounds = useCustomSounds()
 
   const call = ref<ApiCall | null>(null)
   const phase = ref<CallPhase>('idle')
@@ -78,11 +80,23 @@ export const useCallStore = defineStore('call', () => {
     }
   }
 
-  function ring(notes: Note[] | null) {
+  let stopRingtone: (() => void) | null = null
+
+  /**
+   * 'incoming': your chosen ringtone (Sound settings), repeated until answered or ended. It plays even with
+   * notification sounds switched off; choose "None" to silence it. Notes: what the caller hears. null: stop.
+   */
+  function ring(what: 'incoming' | Note[] | null) {
     clearTimer('ring')
-    if (!notes) return
-    playNotes(notes)
-    setTimer('ring', () => playNotes(notes), RING_REPEAT_MS, true)
+    stopRingtone?.()
+    stopRingtone = null
+    if (!what) return
+    if (what === 'incoming') {
+      stopRingtone = customSounds.play(notifier.prefs.value.tones.call, 'call', { volume: notifier.prefs.value.volume, loop: true })
+      return
+    }
+    playNotes(what)
+    setTimer('ring', () => playNotes(what), RING_REPEAT_MS, true)
   }
 
   async function microphone(): Promise<MediaStream | null> {
@@ -101,6 +115,7 @@ export const useCallStore = defineStore('call', () => {
 
   /** Tear everything down on this device (does not tell the API). */
   function cleanup() {
+    ring(null)
     for (const name of [...timers.keys()]) clearTimer(name)
     peer?.close()
     peer = null
@@ -235,7 +250,7 @@ export const useCallStore = defineStore('call', () => {
     if (busy.value) return // on a call on this device; the API only lets the call through if we are not "busy"
     call.value = c
     phase.value = 'incoming'
-    ring(RINGTONE)
+    ring('incoming')
     const left = RING_TIMEOUT_MS - (Date.now() - new Date(c.created_at).getTime())
     setTimer('incoming', () => {
       if (phase.value === 'incoming' && call.value?.id === c.id) cleanup() // the API sends "missed" too; don't hang on to a dead ring

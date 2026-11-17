@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\ChannelController;
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\CustomSoundController;
 use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MessageController;
@@ -91,6 +92,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy']);
 
     Route::get('search', SearchController::class);
+
+    Route::get('sounds', [CustomSoundController::class, 'index']);
+    Route::post('sounds', [CustomSoundController::class, 'store'])->middleware('throttle:uploads');
+    Route::get('sounds/{sound}/file', [CustomSoundController::class, 'file']);
+    Route::delete('sounds/{sound}', [CustomSoundController::class, 'destroy']);
 
     // 1:1 voice calls in DMs (the audio itself goes peer to peer over WebRTC)
     Route::get('calls/current', [CallController::class, 'current']);
