@@ -1,16 +1,22 @@
+import { playTone, resolveTones, type ToneCategory, type ToneId } from '~/utils/tones'
+
 interface Prefs {
   enabled: boolean // master switch for this browser/device
   sound: boolean
   preview: boolean // show the message text in the notification
   dismissed: boolean // user said "not now" to the permission banner
+  tones: Record<ToneCategory, ToneId> // which sound each kind of message plays
+  volume: number // 0..1
 }
 
 const STORAGE_KEY = 'companychat:notifications'
-const DEFAULTS: Prefs = { enabled: true, sound: true, preview: true, dismissed: false }
+const DEFAULTS: Prefs = { enabled: true, sound: true, preview: true, dismissed: false, tones: resolveTones(null), volume: 0.8 }
 
 function loadPrefs(): Prefs {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    const volume = typeof stored.volume === 'number' ? Math.min(1, Math.max(0, stored.volume)) : DEFAULTS.volume
+    return { ...DEFAULTS, ...stored, tones: resolveTones(stored.tones), volume }
   } catch {
     return { ...DEFAULTS }
   }
@@ -20,26 +26,11 @@ type Permission = NotificationPermission | 'unsupported'
 
 let lastBeep = 0
 
-function beep() {
+function beep(tone: ToneId, volume: number) {
   const now = Date.now()
   if (now - lastBeep < 1500) return // one sound per burst of messages
   lastBeep = now
-  try {
-    const ctx = new AudioContext()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = 'sine'
-    osc.frequency.value = 880
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25)
-    osc.connect(gain).connect(ctx.destination)
-    osc.start()
-    osc.stop(ctx.currentTime + 0.3)
-    osc.onended = () => ctx.close()
-  } catch {
-    // blocked by the browser's autoplay rules: the visual notification still shows
-  }
+  playTone(tone, volume)
 }
 
 /** Desktop notifications for this browser. Preferences live in localStorage (per device). */
@@ -74,7 +65,15 @@ export function useNotifier() {
   const active = computed(() => prefs.value.enabled && permission.value === 'granted')
 
   /** Show a notification. Resolves to an error message if the browser refused (for the test button). */
-  async function show(opts: { channelId: string; title: string; body: string; url?: string; forcePreview?: boolean }): Promise<string | null> {
+  async function show(opts: {
+    channelId: string
+    title: string
+    body: string
+    url?: string
+    forcePreview?: boolean
+    /** which tone to play; defaults to the channel-message tone */
+    category?: ToneCategory
+  }): Promise<string | null> {
     if (!active.value) return 'Notifications are switched off or not allowed for this site.'
     const options = {
       body: prefs.value.preview || opts.forcePreview ? opts.body : 'New message',
@@ -103,7 +102,7 @@ export function useNotifier() {
         return e2 instanceof Error ? e2.message : String(e2)
       }
     }
-    if (prefs.value.sound) beep()
+    chime(opts.category)
     return null
   }
 
@@ -113,9 +112,18 @@ export function useNotifier() {
   }
 
   /** Just the sound (used when a background push shows the visual notification instead). */
-  function chime() {
-    if (prefs.value.sound) beep()
+  function chime(category: ToneCategory = 'channel') {
+    if (prefs.value.sound) beep(prefs.value.tones[category], prefs.value.volume)
   }
 
-  return { prefs, permission, supported, canAsk, active, set, request, show, test, chime }
+  function setTone(category: ToneCategory, tone: ToneId) {
+    set('tones', { ...prefs.value.tones, [category]: tone })
+  }
+
+  /** Play a tone now (settings preview): ignores the sound switch and the burst limit. */
+  function preview(tone: ToneId, volume = prefs.value.volume) {
+    playTone(tone, volume)
+  }
+
+  return { prefs, permission, supported, canAsk, active, set, setTone, request, show, test, chime, preview }
 }
