@@ -13,7 +13,7 @@ export interface ApiUser {
   app_role: AppRole
   is_active: boolean
   email?: string // only for admins and yourself
-  notification_tones?: Partial<Record<'dm' | 'mention' | 'channel', string>> | null // only on /me
+  notification_tones?: Partial<Record<'dm' | 'mention' | 'channel' | 'call', string>> | null // only on /me
 }
 
 export interface ApiClient {

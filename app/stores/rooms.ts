@@ -3,7 +3,7 @@ import type { ApiRoom, RoomRole } from '~/types/api'
 import { linkTo, type Member, type RoomSignal } from '~/utils/mesh'
 import { CALL_AUDIO, CallPeer, NETWORK_HINT, type Signal } from '~/utils/peer'
 import { mediaErrorMessage, requestMedia } from '~/utils/recording'
-import { playTone } from '~/utils/tones'
+import { TONES, playNotes } from '~/utils/tones'
 
 /**
  * Group calls (project channels, everyone talks, up to 6) and announcements (one speaker, heard live by everyone
@@ -118,7 +118,7 @@ export const useRoomsStore = defineStore('rooms', () => {
       // a call started in a channel we are a member of: offer to join (no ringing; it is not addressed to us)
       const ch = chat.channels.find((c) => c.id === room.channel_id)
       if (!ch || !ch.member_ids.includes(myId.value ?? '') || busy()) return
-      playTone('bell', 0.6)
+      playNotes(TONES.bell.notes, 0.6)
       toast.add({
         title: `${chat.userName(room.started_by)} started a call in ${audienceName(room)}`,
         icon: 'i-lucide-phone',
@@ -197,7 +197,7 @@ export const useRoomsStore = defineStore('rooms', () => {
       }
       if (phase.value !== 'joining') return stopLocal() // cancelled meanwhile
     } else if (announcement) {
-      playTone('ding') // intercom chime before the voice
+      playNotes(TONES.ding.notes) // intercom chime before the voice
     }
 
     let room: ApiRoom

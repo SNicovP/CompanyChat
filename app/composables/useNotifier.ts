@@ -1,11 +1,11 @@
-import { playTone, resolveTones, type ToneCategory, type ToneId } from '~/utils/tones'
+import { resolveTones, type MessageCategory, type ToneCategory, type ToneRef, type Tones } from '~/utils/tones'
 
 interface Prefs {
   enabled: boolean // master switch for this browser/device
   sound: boolean
   preview: boolean // show the message text in the notification
   dismissed: boolean // user said "not now" to the permission banner
-  tones: Record<ToneCategory, ToneId> // which sound each kind of message plays; also saved to the account
+  tones: Tones // which sound each kind of message plays, and the ringtone; also saved to the account
   tonesOwner?: string | null // the user whose tones these are (a shared browser must not pass them on)
   volume: number // 0..1, this device only
 }
@@ -26,17 +26,15 @@ function loadPrefs(): Prefs {
 type Permission = NotificationPermission | 'unsupported'
 
 let lastBeep = 0
-
-function beep(tone: ToneId, volume: number) {
-  const now = Date.now()
-  if (now - lastBeep < 1500) return // one sound per burst of messages
-  lastBeep = now
-  playTone(tone, volume)
-}
+/** A notification sound plays at most this long, even if the uploaded sound is longer. */
+const NOTIFICATION_MAX_SECONDS = 6
+/** Stops the settings preview that is playing, so trying sounds one after another doesn't pile them up. */
+let stopPreview: (() => void) | null = null
 
 /** Desktop notifications for this browser. Preferences live in localStorage (per device). */
 export function useNotifier() {
   const prefs = useState<Prefs>('notify-prefs', loadPrefs)
+  const sounds = useCustomSounds()
   const permission = useState<Permission>('notify-permission', () => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission))
 
   function save() {
@@ -73,7 +71,7 @@ export function useNotifier() {
     url?: string
     forcePreview?: boolean
     /** which tone to play; defaults to the channel-message tone */
-    category?: ToneCategory
+    category?: MessageCategory
   }): Promise<string | null> {
     if (!active.value) return 'Notifications are switched off or not allowed for this site.'
     const options = {
@@ -113,18 +111,28 @@ export function useNotifier() {
   }
 
   /** Just the sound (used when a background push shows the visual notification instead). */
-  function chime(category: ToneCategory = 'channel') {
-    if (prefs.value.sound) beep(prefs.value.tones[category], prefs.value.volume)
+  function chime(category: MessageCategory = 'channel') {
+    if (!prefs.value.sound) return
+    const now = Date.now()
+    if (now - lastBeep < 1500) return // one sound per burst of messages
+    lastBeep = now
+    sounds.play(prefs.value.tones[category], category, { volume: prefs.value.volume, maxSeconds: NOTIFICATION_MAX_SECONDS })
   }
 
-  function setTone(category: ToneCategory, tone: ToneId) {
+  function setTone(category: ToneCategory, tone: ToneRef) {
     set('tones', { ...prefs.value.tones, [category]: tone })
   }
 
-  /** Play a tone now (settings preview): ignores the sound switch and the burst limit. */
-  function preview(tone: ToneId, volume = prefs.value.volume) {
-    playTone(tone, volume)
+  /** Play a tone now (settings preview): ignores the sound switch and the burst limit; stops the previous preview. */
+  function preview(tone: ToneRef, category: ToneCategory, volume = prefs.value.volume) {
+    stopPreview?.()
+    stopPreview = sounds.play(tone, category, { volume, maxSeconds: 8 })
   }
 
-  return { prefs, permission, supported, canAsk, active, set, setTone, request, show, test, chime, preview }
+  function stopPreviewing() {
+    stopPreview?.()
+    stopPreview = null
+  }
+
+  return { prefs, permission, supported, canAsk, active, set, setTone, request, show, test, chime, preview, stopPreviewing }
 }

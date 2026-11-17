@@ -1,10 +1,16 @@
-// Notification tones, synthesised with Web Audio so there are no sound files to ship or cache.
-// Each tone is a short list of notes; `at` and `dur` are seconds from the start.
+// Notification tones and ringtones. The built-in ones are synthesised with Web Audio, so there are no sound files to
+// ship or cache: each is a short list of notes (`at` and `dur` are seconds from the start). People can also upload
+// their own sounds (useCustomSounds), which are referred to as "custom:{id}".
 
 export type ToneId = 'none' | 'classic' | 'chime' | 'ding' | 'pop' | 'bubble' | 'bell' | 'knock' | 'alert' | 'rise'
 
-/** What a notification is about; each can have its own tone. */
-export type ToneCategory = 'dm' | 'mention' | 'channel'
+/** What a sound is for: a kind of message (each can have its own tone), or an incoming call (the ringtone). */
+export type ToneCategory = 'dm' | 'mention' | 'channel' | 'call'
+export type MessageCategory = Exclude<ToneCategory, 'call'>
+
+/** A built-in tone or ringtone id, or "custom:{id}" for an uploaded sound. */
+export type ToneRef = string
+export type Tones = Record<ToneCategory, ToneRef>
 
 export interface Note {
   freq: number
@@ -57,44 +63,79 @@ export const TONES: Record<ToneId, { label: string; notes: Note[] }> = {
 
 export const TONE_OPTIONS = (Object.keys(TONES) as ToneId[]).map((id) => ({ value: id, label: TONES[id].label }))
 
-export const TONE_CATEGORIES: { value: ToneCategory; label: string; description: string }[] = [
+export type RingtoneId = 'ring' | 'trill' | 'marimba' | 'pulse' | 'none'
+
+/** Incoming-call ringtones: each is one ring, repeated every RING_REPEAT_MS until the call is answered or ends. */
+export const RINGTONES: Record<RingtoneId, { label: string; notes: Note[] }> = {
+  ring: {
+    label: 'Phone ring',
+    notes: [
+      { freq: 440, at: 0, dur: 0.4, gain: 0.1 },
+      { freq: 480, at: 0, dur: 0.4, gain: 0.1 },
+      { freq: 440, at: 0.6, dur: 0.4, gain: 0.1 },
+      { freq: 480, at: 0.6, dur: 0.4, gain: 0.1 },
+    ],
+  },
+  trill: {
+    label: 'Trill',
+    notes: Array.from({ length: 12 }, (_, i) => ({ freq: i % 2 ? 1175 : 988, at: i * 0.07, dur: 0.07, type: 'triangle' as const, gain: 0.12 })),
+  },
+  marimba: {
+    label: 'Marimba',
+    notes: [523, 659, 784, 1047, 784, 659].map((freq, i) => ({ freq, at: i * 0.16, dur: 0.3, type: 'triangle' as const, gain: 0.2 })),
+  },
+  pulse: {
+    label: 'Pulse',
+    notes: [0, 0.25, 0.5].map((at) => ({ freq: 660, at, dur: 0.15, type: 'square' as const, gain: 0.06 })),
+  },
+  none: { label: 'None (silent)', notes: [] },
+}
+
+export const RINGTONE_OPTIONS = (Object.keys(RINGTONES) as RingtoneId[]).map((id) => ({ value: id, label: RINGTONES[id].label }))
+
+export const TONE_CATEGORIES: { value: MessageCategory; label: string; description: string }[] = [
   { value: 'dm', label: 'Direct messages', description: 'Someone writes to you directly' },
   { value: 'mention', label: '@Mentions', description: 'Someone mentions you in a channel' },
   { value: 'channel', label: 'Channel messages', description: 'New messages in channels you watch' },
 ]
 
-export const DEFAULT_TONES: Record<ToneCategory, ToneId> = { dm: 'chime', mention: 'alert', channel: 'classic' }
+export const DEFAULT_TONES: Tones = { dm: 'chime', mention: 'alert', channel: 'classic', call: 'ring' }
+
+const CATEGORIES: ToneCategory[] = ['dm', 'mention', 'channel', 'call']
 
 export const isToneId = (v: unknown): v is ToneId => typeof v === 'string' && v in TONES
+export const isRingtoneId = (v: unknown): v is RingtoneId => typeof v === 'string' && v in RINGTONES
+
+export const CUSTOM_PREFIX = 'custom:'
+export const isCustomRef = (v: unknown): v is string => typeof v === 'string' && /^custom:[0-9a-f-]{36}$/i.test(v)
+export const customRef = (soundId: string): ToneRef => `${CUSTOM_PREFIX}${soundId}`
+export const customIdOf = (ref: ToneRef): string | null => (isCustomRef(ref) ? ref.slice(CUSTOM_PREFIX.length) : null)
+
+/** A value this category can use: one of its built-ins (tones for messages, ringtones for calls) or an uploaded sound. */
+export function isValidTone(category: ToneCategory, v: unknown): v is ToneRef {
+  return isCustomRef(v) || (category === 'call' ? isRingtoneId(v) : isToneId(v))
+}
 
 /** Stored preferences may be missing, partial or hold a tone that no longer exists: fall back per category. */
-export function resolveTones(stored: unknown): Record<ToneCategory, ToneId> {
+export function resolveTones(stored: unknown): Tones {
   const s = (stored && typeof stored === 'object' ? stored : {}) as Record<string, unknown>
-  return {
-    dm: isToneId(s.dm) ? s.dm : DEFAULT_TONES.dm,
-    mention: isToneId(s.mention) ? s.mention : DEFAULT_TONES.mention,
-    channel: isToneId(s.channel) ? s.channel : DEFAULT_TONES.channel,
-  }
+  return Object.fromEntries(CATEGORIES.map((c) => [c, isValidTone(c, s[c]) ? s[c] : DEFAULT_TONES[c]])) as Tones
+}
+
+/** The notes of a built-in tone or ringtone; null for an uploaded sound (or one this version doesn't know). */
+export function builtinNotes(category: ToneCategory, ref: ToneRef): Note[] | null {
+  if (category === 'call') return isRingtoneId(ref) ? RINGTONES[ref].notes : null
+  return isToneId(ref) ? TONES[ref].notes : null
 }
 
 /** Which tone a message gets: a mention wins over the conversation type. */
-export function toneCategory(m: { kind: 'dm' | 'project'; mentionsMe: boolean }): ToneCategory {
+export function toneCategory(m: { kind: 'dm' | 'project'; mentionsMe: boolean }): MessageCategory {
   if (m.mentionsMe) return 'mention'
   return m.kind === 'dm' ? 'dm' : 'channel'
 }
 
-/** Play a tone. `volume` is 0..1. Silently does nothing if the browser blocks audio. */
-export function playTone(id: ToneId, volume = 1) {
-  playNotes(TONES[id]?.notes ?? [], volume)
-}
-
-/** An incoming call: a two-burst phone ring, repeated by the caller of playNotes every RING_REPEAT_MS. */
-export const RINGTONE: Note[] = [
-  { freq: 440, at: 0, dur: 0.4, gain: 0.1 },
-  { freq: 480, at: 0, dur: 0.4, gain: 0.1 },
-  { freq: 440, at: 0.6, dur: 0.4, gain: 0.1 },
-  { freq: 480, at: 0.6, dur: 0.4, gain: 0.1 },
-]
+/** An incoming call's default ring (see RINGTONES). */
+export const RINGTONE: Note[] = RINGTONES.ring.notes
 
 /** What the caller hears while it rings at the other end. */
 export const RINGBACK: Note[] = [
@@ -131,8 +172,7 @@ export function playNotes(notes: Note[], volume = 1) {
   }
 }
 
-export const sameTones = (a: Record<ToneCategory, ToneId>, b: Record<ToneCategory, ToneId>) =>
-  a.dm === b.dm && a.mention === b.mention && a.channel === b.channel
+export const sameTones = (a: Tones, b: Tones) => CATEGORIES.every((c) => a[c] === b[c])
 
 /**
  * After sign-in: which tones this device should use, and whether its local choice should be saved to the account.
@@ -142,11 +182,11 @@ export const sameTones = (a: Record<ToneCategory, ToneId>, b: Record<ToneCategor
  */
 export function reconcileTones(opts: {
   account: unknown
-  local: Record<ToneCategory, ToneId>
+  local: Tones
   /** whose choice the local copy is; undefined if it was made before tones were saved to accounts */
   localOwner: string | null | undefined
   me: string
-}): { tones: Record<ToneCategory, ToneId>; upload: boolean } {
+}): { tones: Tones; upload: boolean } {
   if (opts.account) return { tones: resolveTones(opts.account), upload: false }
   const mine = opts.localOwner === undefined || opts.localOwner === opts.me
   if (mine && !sameTones(opts.local, DEFAULT_TONES)) return { tones: opts.local, upload: true }

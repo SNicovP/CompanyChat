@@ -130,7 +130,8 @@ const items = computed(() => [
         ]
       : []),
     ...(push.supported.value ? [{ label: `Notify when the app is closed: ${onOff(push.active.value)}`, icon: 'i-lucide-bell-dot', onSelect: togglePush }] : []),
-    { label: `Notification sounds: ${onOff(notifier.prefs.value.sound)}…`, icon: 'i-lucide-volume-2', onSelect: () => { soundsOpen.value = true } },
+    // Opens the tone picker; no On/Off in the label, or it reads like a switch. The icon shows when sound is muted.
+    { label: 'Sound settings', icon: notifier.prefs.value.sound ? 'i-lucide-volume-2' : 'i-lucide-volume-x', onSelect: () => { soundsOpen.value = true } },
     ...(notifier.supported.value || push.supported.value
       ? [{ label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: togglePreview }]
       : []),
