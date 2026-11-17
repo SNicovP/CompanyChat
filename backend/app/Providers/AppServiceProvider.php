@@ -31,5 +31,6 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(5)->by('auth:'.mb_strtolower((string) $request->input('email'))),
         ]);
         RateLimiter::for('messages', fn (Request $request) => Limit::perMinute(120)->by($request->user()?->id ?: $request->ip()));
+        RateLimiter::for('calls', fn (Request $request) => Limit::perMinute(10)->by($request->user()?->id ?: $request->ip()));
     }
 }

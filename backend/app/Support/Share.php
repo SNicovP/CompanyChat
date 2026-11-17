@@ -8,6 +8,7 @@ use Illuminate\Validation\Rule;
  * Structured things a message can carry instead of (or as well as) text:
  *   location: { type, lat, lng, label? }
  *   contact:  { type, name, phone?, email?, org?, user_id? }   (user_id: a CompanyChat person)
+ *   call:     { type, status, duration? }   written by the server when a call ends (see App\Support\Calls), never sent by apps
  */
 class Share
 {
@@ -49,6 +50,12 @@ class Share
         return match ($share['type'] ?? null) {
             'location' => '📍 '.($share['label'] ?? 'Location'),
             'contact' => '👤 '.($share['name'] ?? 'Contact'),
+            'call' => match ($share['status'] ?? null) {
+                'ended' => '📞 Voice call',
+                'missed', 'cancelled' => '📞 Missed call',
+                'rejected' => '📞 Declined call',
+                default => '📞 Call failed',
+            },
             default => null,
         };
     }

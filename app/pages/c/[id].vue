@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ApiAttachment, ApiMessage, ApiShare } from '~/types/api'
+import { webrtcSupported } from '~/utils/peer'
 import type { AttachAction } from '~/components/AttachMenu.vue'
 import type { ChannelEvent } from '~/stores/chat'
 import { displayMeta } from '~/utils/status'
@@ -604,6 +605,14 @@ async function removeProject() {
   }
 }
 
+// Voice calls (DMs only): the other person must still be active, and this device must be able to make calls.
+const calls = useCallStore()
+const callable = computed(() => {
+  if (!import.meta.client || !webrtcSupported() || channel.value?.kind !== 'dm') return false
+  const other = chat.otherUser(channel.value)
+  return !!other && other.is_active
+})
+
 const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
 </script>
 
@@ -627,6 +636,18 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           <span v-if="clientName" class="hidden truncate text-sm text-muted sm:inline">in {{ clientName }}</span>
         </template>
         <span v-else class="text-muted">…</span>
+      </div>
+      <div v-if="channel?.kind === 'dm' && callable" class="flex items-center gap-1">
+        <UButton
+          icon="i-lucide-phone"
+          size="sm"
+          color="neutral"
+          variant="ghost"
+          :disabled="calls.busy"
+          :title="calls.busy ? 'You are on a call' : `Voice call ${chat.channelTitle(channel)}`"
+          :aria-label="`Voice call ${chat.channelTitle(channel)}`"
+          @click="calls.start(channel.id)"
+        />
       </div>
       <div v-if="channel?.kind === 'project'" class="flex items-center gap-1">
         <UButton
@@ -749,6 +770,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               <span v-if="r.grouped && r.m.edited_at && editingId !== r.m.id" class="text-xs text-muted">(edited)</span>
               <LocationCard v-if="r.m.share?.type === 'location'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" :sent-at="r.m.created_at" />
               <ContactCard v-else-if="r.m.share?.type === 'contact'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" />
+              <CallCard v-else-if="r.m.share?.type === 'call'" :share="r.m.share" :caller-id="r.m.user_id" :channel-id="r.m.channel_id" />
               <MessageAttachments
                 v-if="r.m.message_attachments?.length"
                 :attachments="r.m.message_attachments"

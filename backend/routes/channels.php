@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Call;
 use App\Models\User;
 use App\Support\Access;
 use Illuminate\Support\Facades\Broadcast;
@@ -10,7 +11,8 @@ use Illuminate\Support\Facades\Broadcast;
 |
 |   presence-office         everyone online; profile.updated, directory.changed
 |   private-channel.{id}    message.created, message.updated, message.deleted
-|   private-user.{id}       mention.created (only for you)
+|   private-user.{id}       mention.created, call.invited, call.updated (only for you)
+|   private-call.{id}       WebRTC set-up whispers (ready, offer, answer, ice) between the two people on a call
 */
 
 Broadcast::channel('office', function (User $user) {
@@ -27,4 +29,10 @@ Broadcast::channel('channel.{channelId}', function (User $user, string $channelI
 
 Broadcast::channel('user.{id}', function (User $user, string $id) {
     return $user->is_active && $user->id === $id;
+});
+
+Broadcast::channel('call.{callId}', function (User $user, string $callId) {
+    $call = Call::query()->find($callId);
+
+    return $user->is_active && $call && $call->involves($user) && $call->isLive();
 });

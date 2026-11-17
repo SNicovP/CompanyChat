@@ -201,7 +201,7 @@ export const useChatStore = defineStore('chat', () => {
     if (channelId) markRead(channelId)
   }
 
-  async function onIncomingMessage(m: { channel_id: string; user_id: string | null; body?: string }) {
+  async function onIncomingMessage(m: { channel_id: string; user_id: string | null; body?: string; share?: ApiMessage['share'] }) {
     if (m.user_id === myId.value) return
     if (!channels.value.some((c) => c.id === m.channel_id)) {
       await load() // e.g. someone just started a DM with us
@@ -212,6 +212,8 @@ export const useChatStore = defineStore('chat', () => {
       touch(m.channel_id)
       unread.value = { ...unread.value, [m.channel_id]: (unread.value[m.channel_id] ?? 0) + 1 }
     }
+    // call history: the callee already knows about a call they took or declined; a missed call is worth a notification
+    if (m.share?.type === 'call' && m.share.status !== 'missed' && m.share.status !== 'cancelled') return
     notifyAbout(m as { channel_id: string; user_id: string | null; body: string })
   }
 
@@ -445,6 +447,8 @@ export const useChatStore = defineStore('chat', () => {
       touch(e.channel_id)
       mentions.value = { ...mentions.value, [e.channel_id]: (mentions.value[e.channel_id] ?? 0) + 1 }
     })
+    // ...and calls to us (see stores/call.ts)
+    useCallStore().listen(echo.private(`user.${id}`))
 
     syncChannelSubscriptions()
 
@@ -471,6 +475,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function stop() {
+    if (started) useCallStore().stop()
     const echo = currentEcho() // never open a new connection just to leave
     if (started && echo) {
       echo.leave('office')

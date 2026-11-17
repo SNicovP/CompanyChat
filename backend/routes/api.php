@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AttachmentController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\ChannelController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\DeviceTokenController;
@@ -90,6 +91,14 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy']);
 
     Route::get('search', SearchController::class);
+
+    // 1:1 voice calls in DMs (the audio itself goes peer to peer over WebRTC)
+    Route::get('calls/current', [CallController::class, 'current']);
+    Route::post('calls', [CallController::class, 'store'])->middleware('throttle:calls');
+    Route::post('calls/{call}/accept', [CallController::class, 'accept']);
+    Route::post('calls/{call}/reject', [CallController::class, 'reject']);
+    Route::post('calls/{call}/end', [CallController::class, 'end']);
+    Route::post('calls/{call}/ping', [CallController::class, 'ping']);
 
     Route::post('push-subscriptions', [PushSubscriptionController::class, 'store']);
     Route::patch('push-subscriptions', [PushSubscriptionController::class, 'update']);
