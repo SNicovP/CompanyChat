@@ -13,6 +13,7 @@ use App\Models\Channel;
 use App\Support\Access;
 use App\Support\Calls;
 use App\Support\Realtime;
+use App\Support\Rooms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,9 +56,8 @@ class CallController extends Controller
             foreach (Call::query()->whereIn('status', [Call::RINGING, Call::ACTIVE])->involving($user->id, $other->id)->lockForUpdate()->get() as $old) {
                 Calls::expireIfStale($old);
             }
-            $busy = Call::query()->live()->involving($user->id, $other->id)->get();
-            abort_if($busy->contains(fn (Call $c) => $c->involves($user)), 409, 'You are already on a call.');
-            abort_if($busy->isNotEmpty(), 409, "{$other->display_name} is on another call.");
+            abort_if(Rooms::busy($user->id), 409, 'You are already on a call.');
+            abort_if(Rooms::busy($other->id), 409, "{$other->display_name} is on another call.");
 
             return Call::create(['channel_id' => $channel->id, 'caller_id' => $user->id, 'callee_id' => $other->id, 'status' => Call::RINGING]);
         });

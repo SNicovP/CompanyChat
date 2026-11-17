@@ -229,7 +229,7 @@ export const useCallStore = defineStore('call', () => {
 
   function onInvited(c: ApiCall) {
     if (c.callee_id !== chat.myId) return
-    if (busy.value) return // on a call on this device; the API only lets the call through if we are not "busy"
+    if (busy.value || useRoomsStore().talking) return // on a call on this device; the API only lets the call through if we are not "busy"
     call.value = c
     phase.value = 'incoming'
     ring(RINGTONE)
@@ -264,7 +264,8 @@ export const useCallStore = defineStore('call', () => {
 
   /** Call the other person in a DM. */
   async function start(channelId: string) {
-    if (busy.value) {
+    const rooms = useRoomsStore()
+    if (busy.value || rooms.talking) {
       toast.add({ title: 'You are already on a call' })
       return
     }
@@ -272,6 +273,7 @@ export const useCallStore = defineStore('call', () => {
       toast.add({ title: 'Calls are not supported here', description: 'This browser cannot make voice calls.', color: 'error' })
       return
     }
+    if (rooms.listening) await rooms.leave() // stop hearing an announcement to make a call
     const target = chat.channels.find((c) => c.id === channelId)
     dialing.value = target ? chat.otherUser(target)?.id ?? null : null
     phase.value = 'outgoing'
@@ -311,6 +313,8 @@ export const useCallStore = defineStore('call', () => {
     ring(null)
     clearTimer('incoming')
     phase.value = 'connecting'
+    const rooms = useRoomsStore()
+    if (rooms.listening) await rooms.leave()
 
     const mic = await microphone()
     if (!mic) {

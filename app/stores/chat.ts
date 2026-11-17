@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { ApiChannel, ApiClient, ApiMessage, ApiUser } from '~/types/api'
+import type { ApiChannel, ApiClient, ApiMessage, ApiRoom, ApiUser } from '~/types/api'
 import { effectiveStatus, type DisplayStatus } from '~/utils/status'
 
 export type Client = Pick<ApiClient, 'id' | 'name'>
@@ -214,6 +214,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     // call history: the callee already knows about a call they took or declined; a missed call is worth a notification
     if (m.share?.type === 'call' && m.share.status !== 'missed' && m.share.status !== 'cancelled') return
+    if (m.share?.type === 'group_call') return // the call itself was announced when it started
     notifyAbout(m as { channel_id: string; user_id: string | null; body: string })
   }
 
@@ -414,6 +415,7 @@ export const useChatStore = defineStore('chat', () => {
         })
         .listen('.message.updated', (e: { message: ApiMessage }) => emit({ type: 'updated', message: e.message }))
         .listen('.message.deleted', (e: { id: string; channel_id: string }) => emit({ type: 'deleted', ...e }))
+        .listen('.room.updated', (e: { room: ApiRoom }) => useRoomsStore().onUpdated(e.room))
     }
     subscribed = wanted
   }
@@ -440,6 +442,7 @@ export const useChatStore = defineStore('chat', () => {
         }
       })
       .listen('.directory.changed', () => { void load().catch(() => {}) })
+      .listen('.room.updated', (e: { room: ApiRoom }) => useRoomsStore().onUpdated(e.room)) // announcements to everyone
 
     // Only our own mentions are sent to this channel.
     echo.private(`user.${id}`).listen('.mention.created', (e: { channel_id: string }) => {
@@ -449,6 +452,7 @@ export const useChatStore = defineStore('chat', () => {
     })
     // ...and calls to us (see stores/call.ts)
     useCallStore().listen(echo.private(`user.${id}`))
+    void useRoomsStore().resume() // group calls and announcements already going
 
     syncChannelSubscriptions()
 
@@ -475,7 +479,10 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function stop() {
-    if (started) useCallStore().stop()
+    if (started) {
+      useCallStore().stop()
+      useRoomsStore().stop()
+    }
     const echo = currentEcho() // never open a new connection just to leave
     if (started && echo) {
       echo.leave('office')

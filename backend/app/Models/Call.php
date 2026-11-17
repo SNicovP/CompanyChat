@@ -46,6 +46,8 @@ class Call extends Model
 
     public const FAILED = 'failed';
 
+    protected $attributes = ['status' => self::RINGING];
+
     protected $fillable = ['channel_id', 'caller_id', 'callee_id', 'status', 'end_reason', 'answered_at', 'ended_at'];
 
     protected function casts(): array

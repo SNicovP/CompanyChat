@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ApiAttachment, ApiMessage, ApiShare } from '~/types/api'
+import { namesSummary } from '~/utils/mesh'
 import { webrtcSupported } from '~/utils/peer'
 import type { AttachAction } from '~/components/AttachMenu.vue'
 import type { ChannelEvent } from '~/stores/chat'
@@ -605,6 +606,14 @@ async function removeProject() {
   }
 }
 
+// Group calls and announcements (project channels you can post in).
+const rooms = useRoomsStore()
+const announceOpen = ref(false)
+const roomsAllowed = computed(() => import.meta.client && webrtcSupported() && !readOnly.value)
+const liveCall = computed(() => (channel.value?.kind === 'project' ? rooms.callIn(channel.value.id) : undefined))
+const liveAnnouncement = computed(() => (channel.value?.kind === 'project' ? rooms.announcementIn(channel.value.id) : undefined))
+const inLiveCall = computed(() => !!liveCall.value && rooms.current?.id === liveCall.value.id)
+
 // Voice calls (DMs only): the other person must still be active, and this device must be able to make calls.
 const calls = useCallStore()
 const callable = computed(() => {
@@ -650,6 +659,41 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         />
       </div>
       <div v-if="channel?.kind === 'project'" class="flex items-center gap-1">
+        <template v-if="roomsAllowed">
+          <UButton
+            v-if="liveCall"
+            icon="i-lucide-phone"
+            size="sm"
+            color="success"
+            variant="soft"
+            :disabled="inLiveCall || calls.busy"
+            :title="inLiveCall ? 'You are in this call' : 'Join the call going on here'"
+            @click="rooms.join(liveCall.id)"
+          >
+            <span class="hidden sm:inline">{{ inLiveCall ? 'In call' : 'Join' }}</span> {{ liveCall.participants.length }}
+          </UButton>
+          <UButton
+            v-else
+            icon="i-lucide-phone"
+            size="sm"
+            color="neutral"
+            variant="ghost"
+            :disabled="calls.busy || rooms.talking"
+            title="Start a group call (up to 6 people)"
+            aria-label="Start a group call"
+            @click="rooms.startCall(channel.id)"
+          />
+          <UButton
+            icon="i-lucide-megaphone"
+            size="sm"
+            color="neutral"
+            variant="ghost"
+            :disabled="calls.busy || rooms.talking || !!liveAnnouncement"
+            :title="liveAnnouncement ? `${chat.userName(liveAnnouncement.started_by)} is announcing here` : 'Announce: your voice plays live for everyone here who is online'"
+            aria-label="Make an announcement"
+            @click="announceOpen = true"
+          />
+        </template>
         <UButton
           :icon="watching ? 'i-lucide-bell-ring' : 'i-lucide-bell'"
           size="sm"
@@ -665,6 +709,35 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         <UButton v-if="chat.canManageChannel(channel)" icon="i-lucide-archive" size="sm" color="neutral" variant="ghost" title="Archive project" aria-label="Archive project" @click="deleteOpen = true" />
       </div>
     </div>
+
+    <div
+      v-if="liveCall && !inLiveCall"
+      class="flex items-center gap-3 border-b border-accented bg-success/10 px-4 py-2 text-sm"
+      role="status"
+    >
+      <UIcon name="i-lucide-phone-call" class="size-4 shrink-0 text-success" />
+      <span class="min-w-0 flex-1 truncate">
+        <strong class="font-semibold text-highlighted">Group call</strong>
+        <span class="text-muted"> · {{ namesSummary(liveCall.participants.map((p) => chat.userName(p.user_id)), 3) }}</span>
+      </span>
+      <UButton size="xs" color="success" icon="i-lucide-phone" :disabled="calls.busy || rooms.talking" @click="rooms.join(liveCall.id)">Join</UButton>
+    </div>
+
+    <UModal v-if="channel?.kind === 'project'" v-model:open="announceOpen" title="Make an announcement" :description="`Your voice plays live for everyone in ${chat.channelTitle(channel)} who is online.`">
+      <template #body>
+        <ul class="list-disc space-y-1 pl-5 text-sm text-muted">
+          <li>People hear you straight away, without answering. They can't talk back.</li>
+          <li>Anyone on Do not disturb or already on a call won't hear it.</li>
+          <li>An announcement lasts at most 5 minutes.</li>
+        </ul>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton color="neutral" variant="ghost" @click="announceOpen = false">Cancel</UButton>
+          <UButton icon="i-lucide-megaphone" @click="announceOpen = false; rooms.announce(channel.id)">Start announcing</UButton>
+        </div>
+      </template>
+    </UModal>
 
     <UModal v-if="channel?.kind === 'project'" v-model:open="deleteOpen" title="Archive project">
       <template #body>
@@ -771,6 +844,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               <LocationCard v-if="r.m.share?.type === 'location'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" :sent-at="r.m.created_at" />
               <ContactCard v-else-if="r.m.share?.type === 'contact'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" />
               <CallCard v-else-if="r.m.share?.type === 'call'" :share="r.m.share" :caller-id="r.m.user_id" :channel-id="r.m.channel_id" />
+              <GroupCallCard v-else-if="r.m.share?.type === 'group_call'" :share="r.m.share" :channel-id="r.m.channel_id" />
               <MessageAttachments
                 v-if="r.m.message_attachments?.length"
                 :attachments="r.m.message_attachments"

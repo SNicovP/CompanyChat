@@ -63,12 +63,13 @@ export function validateFile(file: { name: string; size: number; type?: string }
 
 /** One line for a message that has no text: "🎤 Voice note", "📷 Photo +2", "📍 Client office"... (matches the API). */
 export function messageSummary(m: {
-  share?: { type: 'location'; label?: string } | { type: 'contact'; name: string } | { type: 'call'; status: string } | null
+  share?: { type: 'location'; label?: string } | { type: 'contact'; name: string } | { type: 'call'; status: string } | { type: 'group_call' } | null
   message_attachments?: { mime_type: string | null; file_name: string; deleted_at: string | null }[]
 }): string | null {
   if (m.share?.type === 'location') return `📍 ${m.share.label || 'Location'}`
   if (m.share?.type === 'contact') return `👤 ${m.share.name || 'Contact'}`
   if (m.share?.type === 'call') return callSummary(m.share.status)
+  if (m.share?.type === 'group_call') return '📞 Group call'
   const live = (m.message_attachments ?? []).filter((a) => !a.deleted_at)
   if (!live.length) return null
   const first = live[0]!
