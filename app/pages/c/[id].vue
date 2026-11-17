@@ -585,7 +585,7 @@ function messageMenu(m: Message) {
   if (m.body) items.push({ label: 'Copy text', icon: 'i-lucide-copy', onSelect: () => copyText(m) })
   if (m.user_id === chat.myId) {
     items.push({ label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => startEdit(m) })
-    items.push({ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove(m) })
+    items.push({ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => { if (confirm('Delete this message? It is removed for everyone, with any files attached.')) remove(m) } })
   }
   return items
 }
