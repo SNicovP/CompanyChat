@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { ApiCall } from '~/types/api'
 import { CALL_AUDIO, CallPeer, NETWORK_HINT, endedNotice, webrtcSupported, type Signal } from '~/utils/peer'
+import { mediaErrorMessage, requestMedia } from '~/utils/recording'
 import { RINGBACK, RINGTONE, RING_REPEAT_MS, playNotes, type Note } from '~/utils/tones'
 
 /**
@@ -87,14 +88,10 @@ export const useCallStore = defineStore('call', () => {
 
   async function microphone(): Promise<MediaStream | null> {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: CALL_AUDIO })
+      return await requestMedia({ audio: CALL_AUDIO })
     } catch (e) {
-      const denied = e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
-      toast.add({
-        title: 'Microphone unavailable',
-        description: denied ? 'Allow microphone access for CompanyChat, then try again.' : 'No microphone was found, or another app is using it.',
-        color: 'error',
-      })
+      console.warn('[call] microphone', e)
+      toast.add({ title: 'Microphone unavailable', description: mediaErrorMessage(e, 'microphone'), color: 'error', duration: 12_000 })
       return null
     }
   }
