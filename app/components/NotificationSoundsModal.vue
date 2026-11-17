@@ -33,7 +33,7 @@ function reset() {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Notification sounds" description="Choose a tone for each kind of message. Your tones are saved to your account; sound on/off and volume are for this device.">
+  <UModal v-model:open="open" title="Sound settings" description="Choose a tone for each kind of message. Your tones are saved to your account; sound on/off and volume are for this device.">
     <template #body>
       <div class="space-y-5">
         <USwitch
