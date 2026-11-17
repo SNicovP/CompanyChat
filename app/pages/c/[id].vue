@@ -76,6 +76,17 @@ const typingText = computed(() => {
   return 'Several people are typing…'
 })
 
+// When the bubble appears and the list is already scrolled to the bottom, keep the bottom in view.
+watch(
+  () => typingNames.value.length,
+  async (now, before) => {
+    const el = scroller.value
+    if (!el || now <= before) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    if (nearBottom) await scrollToBottom()
+  },
+)
+
 function sortMessages() {
   messages.value.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
 }
@@ -661,6 +672,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             </div>
           </div>
         </template>
+        <TypingBubble v-if="typingNames.length" :names="typingNames" />
       </div>
 
       <div v-if="readOnly" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted">
@@ -675,7 +687,6 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         @dragleave.prevent="dragging = false"
         @drop.prevent="onDrop"
       >
-        <p v-if="channel?.kind !== 'dm'" class="h-5 px-1 text-xs italic text-muted" aria-live="polite">{{ typingText }}</p>
         <div class="rounded-xl border bg-muted/60 p-2 transition-colors focus-within:border-primary" :class="dragging ? 'border-primary bg-primary/10' : 'border-accented'">
         <div v-if="replyingTo" class="mb-2 flex items-stretch gap-2 overflow-hidden rounded-md bg-elevated/70 text-sm">
           <span class="w-1 shrink-0 bg-primary" />

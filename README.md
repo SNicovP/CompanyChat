@@ -40,7 +40,7 @@ Requires Node ^22.21 || ^24.11 || >=26 (Nuxt 4) and PHP 8.3+ for the backend.
 
 - Your own messages show ticks: one = saved on the server, two (blue) = someone else has opened the chat since
   (`channel_reads`, `GET /api/channels/{id}/reads`, live via the `channel.read` event). In a project it means at least one other person.
-- "X is typing…" uses Reverb client events (whispers, nothing stored) and expires 3 seconds after the last signal.
+- "X is typing…" uses Reverb client events (whispers, nothing stored) and expires 3 seconds after the last signal. Every chat shows a bubble with moving (green) dots after the last message, preceded by initials avatars (up to three, then "+N"), so no profile pictures are needed. A DM also shows a green "typing…" in its header instead of the contact's status.
 - Unsent text is kept per chat on this device (localStorage), so switching chats or reloading never loses a draft.
 
 ## Resetting for go-live
