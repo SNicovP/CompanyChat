@@ -452,6 +452,11 @@ export const useChatStore = defineStore('chat', () => {
     })
     // ...and calls to us (see stores/call.ts)
     useCallStore().listen(echo.private(`user.${id}`))
+    const blocks = useBlocksStore()
+    echo.private(`user.${id}`)
+      .listen('.block.changed', (e: { blocker_id: string; blocked_id: string; blocked: boolean }) => blocks.onChanged(e))
+      .listen('.room.updated', (e: { room: ApiRoom }) => useRoomsStore().onUpdated(e.room)) // intercom to us
+    void blocks.load()
     void useRoomsStore().resume() // group calls and announcements already going
 
     syncChannelSubscriptions()
@@ -482,6 +487,7 @@ export const useChatStore = defineStore('chat', () => {
     if (started) {
       useCallStore().stop()
       useRoomsStore().stop()
+      useBlocksStore().reset()
     }
     const echo = currentEcho() // never open a new connection just to leave
     if (started && echo) {

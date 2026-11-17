@@ -206,6 +206,7 @@ const items = computed(() => [
     </div>
     <NotificationSoundsModal v-model:open="soundsOpen" />
     <ClientOnly><CallOverlay /><RoomOverlay /></ClientOnly>
+    <BlockConfirmModal />
     <UModal v-model:open="announceAllOpen" title="Announce to everyone" description="Your voice plays live for everyone who is online, up to 30 people.">
       <template #body>
         <ul class="list-disc space-y-1 pl-5 text-sm text-muted">

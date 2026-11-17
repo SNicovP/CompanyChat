@@ -34,6 +34,10 @@ class Rooms
             return false;
         }
 
+        if ($room->target_user_id) {
+            return $room->target_user_id === $user->id;
+        }
+
         return $room->channel_id ? Access::canAccessChannel($user, $room->channel_id) : true;
     }
 

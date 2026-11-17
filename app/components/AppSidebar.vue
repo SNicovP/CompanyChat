@@ -85,6 +85,7 @@ async function openDm(userId: string) {
   }
 }
 
+const blocks = useBlocksStore()
 const people = computed(() => chat.activePeople.filter((u) => u.id !== chat.myId))
 
 // Only admins add clients and projects; RLS is the real gate, this just hides the button.
@@ -158,9 +159,8 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
         <UIcon name="i-lucide-messages-square" class="size-5 shrink-0" />Direct messages
       </div>
       <div class="space-y-0.5">
+        <UserMenu v-for="dm in chat.dms" :key="dm.id" :user-id="chat.otherUser(dm)?.id">
         <NuxtLink
-          v-for="dm in chat.dms"
-          :key="dm.id"
           :to="`/c/${dm.id}`"
           class="flex items-center gap-2.5 rounded-md py-1.5 pl-8 pr-2 text-base"
           :class="activeId === dm.id ? 'bg-accented font-semibold text-highlighted' : chat.unread[dm.id] ? 'font-bold text-highlighted hover:bg-accented/60' : 'text-toned hover:bg-accented/60 hover:text-highlighted'"
@@ -170,8 +170,10 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
           <span class="ml-auto flex shrink-0 gap-1">
             <UBadge v-if="chat.mentions[dm.id]" size="sm" color="error">@{{ chat.mentions[dm.id] }}</UBadge>
             <UBadge v-if="chat.unread[dm.id]" size="sm">{{ chat.unread[dm.id] }}</UBadge>
+            <UIcon v-if="blocks.between(chat.otherUser(dm)?.id)" name="i-lucide-ban" class="size-4 text-muted" :aria-label="blocks.reason(chat.otherUser(dm)?.id) ?? undefined" />
           </span>
         </NuxtLink>
+        </UserMenu>
         <p v-if="!chat.dms.length" class="py-1 pl-9 pr-2 text-sm text-muted">No conversations yet.</p>
         <button type="button" class="flex w-full items-center gap-2.5 rounded-md py-1.5 pl-8 pr-2 text-left text-base text-muted hover:bg-accented/60 hover:text-highlighted" @click="dmOpen = true">
           <span class="inline-flex size-6 items-center justify-center rounded bg-accented"><UIcon name="i-lucide-plus" class="size-4" /></span>New message
@@ -190,16 +192,16 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
     <UModal v-model:open="dmOpen" title="New message">
       <template #body>
         <p v-if="!people.length" class="text-sm text-muted">No one else has joined yet.</p>
-        <button
-          v-for="u in people"
-          :key="u.id"
-          type="button"
-          class="flex w-full items-center gap-3 rounded px-2 py-2 text-left hover:bg-elevated"
-          @click="openDm(u.id)"
-        >
-          <UserAvatar :name="u.display_name" :status="chat.displayStatus(u.id)" />
-          {{ u.display_name }}
-        </button>
+        <UserMenu v-for="u in people" :key="u.id" :user-id="u.id">
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 rounded px-2 py-2 text-left hover:bg-elevated"
+            @click="openDm(u.id)"
+          >
+            <UserAvatar :name="u.display_name" :status="chat.displayStatus(u.id)" />
+            {{ u.display_name }}
+          </button>
+        </UserMenu>
       </template>
     </UModal>
   </aside>

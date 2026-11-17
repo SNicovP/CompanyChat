@@ -16,6 +16,7 @@ use Illuminate\Support\Collection;
  * @property string $id
  * @property string $kind call|announcement
  * @property ?string $channel_id
+ * @property ?string $target_user_id intercom: the one person who hears the announcement
  * @property string $started_by
  * @property string $status live|ended
  * @property ?Carbon $ended_at
@@ -40,7 +41,7 @@ class Room extends Model
     /** A participant whose app has not pinged for this long has left (closed tab, lost network). */
     public const STALE_SECONDS = 90;
 
-    protected $fillable = ['kind', 'channel_id', 'started_by', 'status', 'ended_at'];
+    protected $fillable = ['kind', 'channel_id', 'target_user_id', 'started_by', 'status', 'ended_at'];
 
     protected $attributes = ['status' => 'live'];
 

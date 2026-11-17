@@ -91,6 +91,8 @@ export interface ApiRoom {
   id: string
   kind: 'call' | 'announcement'
   channel_id: string | null
+  /** intercom: the one person who hears this announcement */
+  target_user_id: string | null
   started_by: string
   status: 'live' | 'ended'
   created_at: string

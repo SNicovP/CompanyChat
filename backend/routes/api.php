@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AttachmentController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BlockController;
 use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\ChannelController;
 use App\Http\Controllers\Api\ClientController;
@@ -54,6 +55,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::put('me/password', [ProfileController::class, 'updatePassword']);
 
     Route::get('users', [UserController::class, 'index']);
+    Route::get('blocks', [BlockController::class, 'index']);
+    Route::put('users/{user}/block', [BlockController::class, 'store']);
+    Route::delete('users/{user}/block', [BlockController::class, 'destroy']);
 
     Route::get('clients', [ClientController::class, 'index']);
     Route::post('clients', [ClientController::class, 'store']);

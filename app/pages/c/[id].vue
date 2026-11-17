@@ -632,6 +632,11 @@ async function removeProject() {
   }
 }
 
+// Blocking (either way) closes a DM: history stays, but no new messages or calls.
+const blocks = useBlocksStore()
+const dmPartner = computed(() => (channel.value?.kind === 'dm' ? chat.otherUser(channel.value)?.id : undefined))
+const blockedWhy = computed(() => blocks.reason(dmPartner.value))
+
 // Group calls and announcements (project channels you can post in).
 const rooms = useRoomsStore()
 const announceOpen = ref(false)
@@ -656,7 +661,9 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
     <div class="flex items-center justify-between border-b border-accented bg-default px-4 py-2.5">
       <div class="flex min-w-0 items-center gap-2">
         <template v-if="channel?.kind === 'dm'">
-          <UserAvatar :name="chat.channelTitle(channel)" :status="chat.displayStatus(chat.otherUser(channel)?.id)" size="sm" ring="default" />
+          <UserMenu :user-id="chat.otherUser(channel)?.id">
+            <UserAvatar :name="chat.channelTitle(channel)" :status="chat.displayStatus(chat.otherUser(channel)?.id)" size="sm" ring="default" />
+          </UserMenu>
           <div class="min-w-0">
             <span class="block truncate text-base font-semibold leading-tight text-highlighted">{{ chat.channelTitle(channel) }}</span>
             <!-- like WhatsApp: "typing…" replaces their status while they type -->
@@ -672,7 +679,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         </template>
         <span v-else class="text-muted">…</span>
       </div>
-      <div v-if="channel?.kind === 'dm' && callable" class="flex items-center gap-1">
+      <div v-if="channel?.kind === 'dm' && callable && !blockedWhy" class="flex items-center gap-1">
         <UButton
           icon="i-lucide-phone"
           size="sm"
@@ -806,7 +813,9 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             @contextmenu.capture="nativeMenuTarget($event) && $event.stopPropagation()"
           >
             <div class="w-9 shrink-0 pt-0.5">
-              <UserAvatar v-if="!r.grouped" :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
+              <UserMenu v-if="!r.grouped" :user-id="r.m.user_id">
+                <UserAvatar :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
+              </UserMenu>
               <span v-else class="hidden pt-1 text-right text-[10px] leading-5 text-dimmed group-hover:block group-focus-within:block">{{ clock(r.m.created_at) }}</span>
             </div>
             <span
@@ -820,7 +829,9 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             </span>
             <div class="min-w-0 flex-1">
               <div v-if="!r.grouped" class="flex items-baseline gap-2">
-                <span class="font-semibold text-highlighted">{{ chat.userName(r.m.user_id) }}</span>
+                <UserMenu :user-id="r.m.user_id">
+                  <span class="font-semibold text-highlighted">{{ chat.userName(r.m.user_id) }}</span>
+                </UserMenu>
                 <span class="text-xs text-muted">{{ time(r.m.created_at) }}<span v-if="r.m.edited_at"> (edited)</span></span>
               </div>
               <div
@@ -889,7 +900,12 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         <TypingBubble v-if="typingNames.length" :names="typingNames" />
       </div>
 
-      <div v-if="readOnly" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted">
+      <div v-if="blockedWhy" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted" role="status">
+        <UIcon name="i-lucide-ban" class="size-4 shrink-0" />
+        <span class="flex-1">{{ blockedWhy }} You can't message or call each other.</span>
+        <UButton v-if="blocks.iBlocked(dmPartner)" size="xs" color="neutral" variant="soft" @click="blocks.unblock(dmPartner!)">Unblock</UButton>
+      </div>
+      <div v-else-if="readOnly" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted">
         <UIcon name="i-lucide-eye" class="size-4 shrink-0" />
         You have read-only access to this project. Use a direct message to ask someone about it.
       </div>

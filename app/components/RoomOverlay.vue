@@ -42,12 +42,14 @@ const title = computed(() => {
   const r = room.value
   if (!r) return ''
   if (rooms.role === 'member') return `Call in ${rooms.audienceName(r)}`
+  if (r.target_user_id) return rooms.role === 'speaker' ? `Intercom to ${rooms.audienceName(r)}` : `Intercom from ${chat.userName(r.started_by)}`
   if (rooms.role === 'speaker') return `Announcing to ${rooms.audienceName(r)}`
   return `${chat.userName(r.started_by)} · ${rooms.audienceName(r)}`
 })
 const others = computed(() => rooms.members.filter((m) => m.role === 'member'))
 const subtitle = computed(() => {
   if (rooms.phase === 'joining') return rooms.role === 'listener' ? 'Tuning in…' : 'Joining…'
+  if (rooms.role === 'speaker' && room.value?.target_user_id) return `${rooms.listeners ? 'Listening' : 'Waiting for them…'} · ${elapsed.value} / 5:00`
   if (rooms.role === 'speaker') return `${rooms.listeners} listening · ${elapsed.value} / 5:00`
   if (rooms.role === 'listener') return `Live announcement · ${elapsed.value}`
   if (!others.value.length) return `Waiting for others · ${elapsed.value}`
@@ -55,7 +57,11 @@ const subtitle = computed(() => {
 })
 const unreachable = computed(() => Object.entries(rooms.linkStates).filter(([, s]) => s === 'failed').map(([id]) => chat.userName(id)))
 const icon = computed(() => (rooms.role === 'member' ? 'i-lucide-users' : 'i-lucide-megaphone'))
-const leaveLabel = computed(() => (rooms.role === 'speaker' ? 'End announcement' : rooms.role === 'listener' ? 'Stop listening' : 'Leave call'))
+const leaveLabel = computed(() => {
+  if (rooms.role === 'member') return 'Leave call'
+  if (room.value?.target_user_id) return rooms.role === 'speaker' ? 'End intercom' : 'Stop listening'
+  return rooms.role === 'speaker' ? 'End announcement' : 'Stop listening'
+})
 </script>
 
 <template>

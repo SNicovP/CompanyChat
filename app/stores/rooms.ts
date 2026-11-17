@@ -17,6 +17,7 @@ export type RoomPhase = 'idle' | 'joining' | 'live'
 const HEARTBEAT_MS = 30_000
 const RECOVER_MS = 12_000
 const CONNECT_TIMEOUT_MS = 25_000
+const INTERCOM_PICKUP_MS = 15_000
 
 type PresenceChannel = {
   here: (cb: (members: PresenceMember[]) => void) => PresenceChannel
@@ -68,9 +69,10 @@ export const useRoomsStore = defineStore('rooms', () => {
     return Object.values(live.value).find((r) => r.kind === 'call' && r.channel_id === channelId)
   }
   function announcementIn(channelId: string | null): ApiRoom | undefined {
-    return Object.values(live.value).find((r) => r.kind === 'announcement' && r.channel_id === channelId)
+    return Object.values(live.value).find((r) => r.kind === 'announcement' && !r.target_user_id && r.channel_id === channelId)
   }
   const audienceName = (room: ApiRoom) => {
+    if (room.target_user_id) return room.target_user_id === myId.value ? 'you' : chat.userName(room.target_user_id)
     if (!room.channel_id) return 'everyone'
     const ch = chat.channels.find((c) => c.id === room.channel_id)
     return ch ? chat.channelTitle(ch) : 'a channel'
@@ -104,7 +106,7 @@ export const useRoomsStore = defineStore('rooms', () => {
         const wasListening = role.value === 'listener'
         const name = chat.userName(room.started_by)
         cleanup()
-        if (wasListening) toast.add({ title: `${name} finished the announcement` })
+        if (wasListening) toast.add({ title: room.target_user_id ? `${name} ended the intercom` : `${name} finished the announcement` })
       }
       return
     }
@@ -149,6 +151,20 @@ export const useRoomsStore = defineStore('rooms', () => {
   /** Announce to a project channel, or (admins, null) to everyone online. */
   function announce(channelId: string | null) {
     return enter('speaker', () => api<{ room: ApiRoom }>('/rooms', { method: 'POST', body: { kind: 'announcement', channel_id: channelId } }))
+  }
+
+  /** Intercom (admins): your voice plays live for one person, without them answering. */
+  async function intercom(userId: string) {
+    await enter('speaker', () => api<{ room: ApiRoom }>('/rooms', { method: 'POST', body: { kind: 'announcement', target_user_id: userId } }))
+    const room = current.value
+    if (!room || room.target_user_id !== userId) return
+    // they hear it only if their app is open; don't talk into the void
+    setTimeout(() => {
+      if (current.value?.id === room.id && listeners.value === 0) {
+        void leave()
+        toast.add({ title: `${chat.userName(userId)} didn't pick up the intercom`, description: 'They may be offline, on a call, or on Do not disturb.', color: 'warning' })
+      }
+    }, INTERCOM_PICKUP_MS)
   }
 
   function listen(room: ApiRoom) {
@@ -204,7 +220,10 @@ export const useRoomsStore = defineStore('rooms', () => {
     joinPresence(room)
     heartbeat = setInterval(() => void ping(), HEARTBEAT_MS)
     if (as === 'listener') {
-      toast.add({ title: `${chat.userName(room.started_by)} is announcing to ${audienceName(room)}`, icon: 'i-lucide-megaphone' })
+      toast.add({
+        title: room.target_user_id ? `${chat.userName(room.started_by)} is on the intercom` : `${chat.userName(room.started_by)} is announcing to ${audienceName(room)}`,
+        icon: 'i-lucide-megaphone',
+      })
     }
   }
 
@@ -399,6 +418,6 @@ export const useRoomsStore = defineStore('rooms', () => {
 
   return {
     live, current, role, phase, muted, joinedAt, members, remote, linkStates, talking, listening, listeners,
-    callIn, announcementIn, audienceName, resume, onUpdated, startCall, join, announce, leave, toggleMute, stop,
+    callIn, announcementIn, audienceName, resume, onUpdated, startCall, join, announce, intercom, leave, toggleMute, stop,
   }
 })

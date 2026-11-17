@@ -13,6 +13,7 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Support\Access;
 use App\Support\Attachments;
+use App\Support\Blocks;
 use App\Support\Mentions;
 use App\Support\Realtime;
 use App\Support\Share;
@@ -73,6 +74,8 @@ class MessageController extends Controller
         $user = $request->user();
         abort_unless(Access::canAccessChannel($user, $channel), 404);
         abort_unless(Access::canPostInChannel($user, $channel), 403, 'You can only read in this channel.');
+        $blocked = Blocks::reasonInDm($user, $channel);
+        abort_if($blocked !== null, 403, $blocked ?? '');
 
         $data = $request->validate([
             'body' => ['nullable', 'string', 'max:'.Message::MAX_BODY],

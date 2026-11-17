@@ -12,7 +12,8 @@ use Illuminate\Foundation\Events\Dispatchable;
 
 /**
  * A group call or announcement started, someone joined or left a call, or it ended. Heard by everyone who could
- * join: private-channel.{id} for a channel, presence-office for an announcement to everyone.
+ * join: private-channel.{id} for a channel, private-user.{id} for an intercom, presence-office for an announcement
+ * to everyone.
  */
 class RoomUpdated implements ShouldBroadcastNow
 {
@@ -22,7 +23,11 @@ class RoomUpdated implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [$this->room->channel_id ? new PrivateChannel('channel.'.$this->room->channel_id) : new PresenceChannel('office')];
+        return match (true) {
+            (bool) $this->room->target_user_id => [new PrivateChannel('user.'.$this->room->target_user_id)], // intercom
+            (bool) $this->room->channel_id => [new PrivateChannel('channel.'.$this->room->channel_id)],
+            default => [new PresenceChannel('office')],
+        };
     }
 
     public function broadcastAs(): string

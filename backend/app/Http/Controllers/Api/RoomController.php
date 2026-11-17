@@ -9,7 +9,9 @@ use App\Jobs\ExpireRoom;
 use App\Models\Channel;
 use App\Models\Room;
 use App\Models\User;
+use App\Enums\UserStatus;
 use App\Support\Access;
+use App\Support\Blocks;
 use App\Support\Calls;
 use App\Support\Realtime;
 use App\Support\Rooms;
@@ -47,7 +49,12 @@ class RoomController extends Controller
         $data = $request->validate([
             'kind' => ['required', Rule::in([Room::CALL, Room::ANNOUNCEMENT])],
             'channel_id' => [Rule::requiredIf($request->input('kind') === Room::CALL), 'nullable', 'uuid'],
+            // intercom: an announcement only this person hears (admins)
+            'target_user_id' => ['nullable', 'uuid', 'prohibits:channel_id', Rule::prohibitedIf($request->input('kind') !== Room::ANNOUNCEMENT)],
         ]);
+        if (! empty($data['target_user_id'])) {
+            return $this->intercom($user, $data['target_user_id']);
+        }
         $channel = null;
         if (! empty($data['channel_id'])) {
             $channel = Channel::query()->find($data['channel_id']);
@@ -57,7 +64,7 @@ class RoomController extends Controller
             ? 'Group calls and announcements are for project channels you can post in.'
             : 'Only admins can make an announcement to everyone.');
 
-        $existing = Room::query()->live()->where('kind', $data['kind'])->where('channel_id', $channel?->id)->latest()->first();
+        $existing = Room::query()->live()->where('kind', $data['kind'])->where('channel_id', $channel?->id)->whereNull('target_user_id')->latest()->first();
         if ($existing && ! Rooms::expireIfStale($existing)) {
             abort_if($existing->isAnnouncement(), 409, User::query()->find($existing->started_by)?->display_name.' is already announcing here.');
 
@@ -74,6 +81,33 @@ class RoomController extends Controller
 
         Realtime::send(new RoomUpdated($room));
         ExpireRoom::dispatch($room->id)->delay(now()->addSeconds($room->isAnnouncement() ? Room::ANNOUNCEMENT_MAX_SECONDS + 1 : Room::STALE_SECONDS + 5));
+
+        return response()->json(['room' => $this->payload($room, $user)], 201);
+    }
+
+    /** Start an intercom: your voice plays live for one person, without them answering. Admins only. */
+    private function intercom(User $user, string $targetId): JsonResponse
+    {
+        abort_unless($user->is_active && $user->isAdmin(), 403, 'Only admins can use the intercom.');
+        $target = User::query()->find($targetId);
+        abort_unless($target && $target->is_active, 422, 'This person can no longer be reached.');
+        abort_if($target->id === $user->id, 422, 'You cannot intercom yourself.');
+        $blocked = Blocks::reason($user, $target);
+        abort_if($blocked !== null, 403, $blocked ?? '');
+        abort_if($target->status === UserStatus::Dnd, 409, "{$target->display_name} is on Do not disturb.");
+        abort_if(Rooms::busy($user->id), 409, 'You are already on a call.');
+        abort_if(Rooms::busy($target->id), 409, "{$target->display_name} is on a call.");
+        $going = Room::query()->live()->where('target_user_id', $target->id)->get()->reject(fn (Room $r) => Rooms::expireIfStale($r));
+        abort_if($going->isNotEmpty(), 409, "Someone is already on the intercom to {$target->display_name}.");
+
+        $room = DB::transaction(function () use ($user, $target) {
+            $room = Room::create(['kind' => Room::ANNOUNCEMENT, 'target_user_id' => $target->id, 'started_by' => $user->id]);
+            Rooms::join($room, $user, 'speaker');
+
+            return $room;
+        });
+        Realtime::send(new RoomUpdated($room));
+        ExpireRoom::dispatch($room->id)->delay(now()->addSeconds(Room::ANNOUNCEMENT_MAX_SECONDS + 1));
 
         return response()->json(['room' => $this->payload($room, $user)], 201);
     }

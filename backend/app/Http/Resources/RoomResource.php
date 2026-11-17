@@ -15,6 +15,7 @@ class RoomResource extends JsonResource
             'id' => $this->id,
             'kind' => $this->kind,
             'channel_id' => $this->channel_id,
+            'target_user_id' => $this->target_user_id,
             'started_by' => $this->started_by,
             'status' => $this->status,
             'created_at' => $this->created_at?->toISOString(),
