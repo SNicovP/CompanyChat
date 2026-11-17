@@ -16,6 +16,13 @@ export type ChannelEvent =
   | { type: 'updated'; message: ApiMessage }
   | { type: 'deleted'; id: string; channel_id: string }
   | { type: 'read'; channel_id: string; user_id: string; read_at: string }
+  /** Live events may have been missed: refetch read markers (and, if `full`, the latest messages). */
+  | { type: 'resync'; full: boolean }
+
+/** How often unread counts and read markers are re-checked while the app is on screen. */
+export const RECONCILE_MS = 60_000
+/** Hidden for longer than this: the socket may have died silently, so reconnect when shown again. */
+export const STALE_SOCKET_MS = 30_000
 export interface Channel {
   id: string
   kind: 'project' | 'dm'
@@ -117,10 +124,32 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // --- unread counts ---------------------------------------------------------------------
+  /** The window has keyboard focus: used for notifications (someone looking elsewhere still wants one). */
   const viewing = () => typeof document !== 'undefined' && document.hasFocus()
+
+  // The desktop app keeps its page "visible" even when hidden in the tray (it disables background throttling),
+  // so it reports the real window state itself. Older desktop builds don't: fall back to focus there.
+  const desktopShown = ref<boolean | null>(null)
+
+  /**
+   * The open chat is on screen, so new messages in it count as read (the second tick, no unread badge).
+   * On screen is enough, focus is not needed: a chat open on a second monitor is being read.
+   */
+  function reading(): boolean {
+    if (typeof document === 'undefined' || document.visibilityState === 'hidden') return false
+    if (desktopBridge()) return desktopShown.value ?? document.hasFocus()
+    return true
+  }
+
+  // Counts changed here (a read, a live message) while GET /unread was in flight must not be overwritten by
+  // that older answer. Channels being marked read stay protected until the server has saved the marker.
+  const changedAt: Record<string, number> = {}
+  const readsInFlight = new Map<string, number>()
+  const touch = (channelId: string) => { changedAt[channelId] = performance.now() }
 
   /** False when the counts could not be fetched (e.g. still offline). */
   async function loadUnread(): Promise<boolean> {
+    const startedAt = performance.now()
     let data: { unread: Record<string, number>; mentions: Record<string, number> }
     try {
       data = await api('/unread')
@@ -128,21 +157,41 @@ export const useChatStore = defineStore('chat', () => {
       return false // counts are a nicety; never block the app on them
     }
     // PHP sends an empty object as [] when nothing is unread
-    const counts = { ...(Array.isArray(data.unread) ? {} : data.unread) }
-    const mentionCounts = { ...(Array.isArray(data.mentions) ? {} : data.mentions) }
-    if (activeChannelId.value && viewing()) {
-      delete counts[activeChannelId.value]
-      delete mentionCounts[activeChannelId.value]
+    const counts: Record<string, number> = { ...(Array.isArray(data.unread) ? {} : data.unread) }
+    const mentionCounts: Record<string, number> = { ...(Array.isArray(data.mentions) ? {} : data.mentions) }
+    const keepLocal = new Set([...readsInFlight.keys(), ...Object.keys(changedAt).filter((id) => changedAt[id]! >= startedAt)])
+    if (activeChannelId.value && reading()) keepLocal.add(activeChannelId.value)
+    for (const id of keepLocal) {
+      if (unread.value[id]) counts[id] = unread.value[id]
+      else delete counts[id]
+      if (mentions.value[id]) mentionCounts[id] = mentions.value[id]
+      else delete mentionCounts[id]
     }
     unread.value = counts
     mentions.value = mentionCounts
     return true
   }
 
-  async function markRead(channelId: string) {
+  /** Zero a channel's badges here only (the server already knows, e.g. we read it on another device). */
+  function clearLocal(channelId: string) {
+    touch(channelId)
     if (unread.value[channelId]) unread.value = { ...unread.value, [channelId]: 0 }
     if (mentions.value[channelId]) mentions.value = { ...mentions.value, [channelId]: 0 }
-    await api(`/channels/${channelId}/read`, { method: 'POST' }).catch(() => {})
+  }
+
+  async function markRead(channelId: string) {
+    clearLocal(channelId)
+    readsInFlight.set(channelId, (readsInFlight.get(channelId) ?? 0) + 1)
+    try {
+      await api(`/channels/${channelId}/read`, { method: 'POST' })
+    } catch {
+      // the next reconcile shows the server's view again
+    } finally {
+      const left = (readsInFlight.get(channelId) ?? 1) - 1
+      if (left > 0) readsInFlight.set(channelId, left)
+      else readsInFlight.delete(channelId)
+      touch(channelId)
+    }
   }
 
   function setActive(channelId: string | null) {
@@ -156,8 +205,11 @@ export const useChatStore = defineStore('chat', () => {
       await load() // e.g. someone just started a DM with us
       return
     }
-    if (m.channel_id === activeChannelId.value && viewing()) markRead(m.channel_id)
-    else unread.value = { ...unread.value, [m.channel_id]: (unread.value[m.channel_id] ?? 0) + 1 }
+    if (m.channel_id === activeChannelId.value && reading()) markRead(m.channel_id)
+    else {
+      touch(m.channel_id)
+      unread.value = { ...unread.value, [m.channel_id]: (unread.value[m.channel_id] ?? 0) + 1 }
+    }
     notifyAbout(m as { channel_id: string; user_id: string | null; body: string })
   }
 
@@ -201,7 +253,8 @@ export const useChatStore = defineStore('chat', () => {
   let catchingUp: Promise<void> | null = null
   let lastCatchUp = 0
 
-  function catchUp(reason: string) {
+  /** `full`: also refetch the open chat's latest messages (after a reconnect or coming back to the app). */
+  function catchUp(reason: string, full = true) {
     if (!loaded.value || catchingUp || Date.now() - lastCatchUp < 5000) return
     lastCatchUp = Date.now()
     catchingUp = (async () => {
@@ -210,6 +263,7 @@ export const useChatStore = defineStore('chat', () => {
         lastCatchUp = 0 // network not back yet: let the reconnect try again
         return
       }
+      emit({ type: 'resync', full })
       const summary = catchUpSummary({
         before,
         after: { unread: unread.value, mentions: mentions.value },
@@ -240,7 +294,40 @@ export const useChatStore = defineStore('chat', () => {
   let stopConnected: (() => void) | null = null
   let stopResume: (() => void) | null = null
   const channelListeners = new Set<(e: ChannelEvent) => void>()
-  const onFocus = () => { if (activeChannelId.value) markRead(activeChannelId.value) }
+  let stopDesktopVisibility: (() => void) | null = null
+  let reconcileTimer: ReturnType<typeof setInterval> | null = null
+  let hiddenSince: number | null = null
+
+  /** The open chat just came on screen: what arrived meanwhile is now read. */
+  const markActiveRead = () => { if (activeChannelId.value && reading()) markRead(activeChannelId.value) }
+  const onFocus = () => markActiveRead()
+
+  /**
+   * Back on screen after being hidden (tab switch, phone app resumed). A background tab or app may have lost its
+   * socket without noticing: after a while away, reconnect (the reconnect catches up); otherwise just catch up.
+   */
+  function onShown() {
+    markActiveRead()
+    const away = hiddenSince === null ? 0 : Date.now() - hiddenSince
+    hiddenSince = null
+    if (away >= STALE_SOCKET_MS && reconnectEcho()) return
+    catchUp('shown', away >= 10_000) // a quick tab switch only needs counts and ticks, not the messages
+  }
+
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') hiddenSince ??= Date.now()
+    else onShown()
+  }
+  const onOnline = () => catchUp('online')
+  // Capacitor fires these on the document when the Android app goes to the background and comes back.
+  const onNativePause = () => { hiddenSince ??= Date.now() }
+  const onNativeResume = () => onShown()
+
+  /** While on screen: reload counts and read markers now and then, in case a live event was lost. */
+  function reconcile() {
+    if (document.visibilityState === 'hidden' || (desktopBridge() && desktopShown.value === false)) return
+    catchUp('periodic', false)
+  }
 
   /** Hear the live events of channels (used by the open channel page). Returns an unsubscribe function. */
   function onChannelEvent(fn: (e: ChannelEvent) => void): () => void {
@@ -300,7 +387,10 @@ export const useChatStore = defineStore('chat', () => {
       if (subscribed.has(id)) continue
       echo.private(`channel.${id}`)
         .listenForWhisper('typing', (e: { user_id: string }) => hearTyping(id, e.user_id))
-        .listen('.channel.read', (e: { channel_id: string; user_id: string; read_at: string }) => emit({ type: 'read', ...e }))
+        .listen('.channel.read', (e: { channel_id: string; user_id: string; read_at: string }) => {
+          if (e.user_id === myId.value) clearLocal(id) // we read it on another device or tab
+          emit({ type: 'read', ...e })
+        })
         .listen('.message.created', (e: { message: ApiMessage }) => {
           if (e.message.user_id) clearTyping(id, e.message.user_id) // their message arrived: no longer typing
           emit({ type: 'created', message: e.message })
@@ -337,7 +427,8 @@ export const useChatStore = defineStore('chat', () => {
 
     // Only our own mentions are sent to this channel.
     echo.private(`user.${id}`).listen('.mention.created', (e: { channel_id: string }) => {
-      if (e.channel_id === activeChannelId.value && viewing()) return // already being read
+      if (e.channel_id === activeChannelId.value && reading()) return // already being read
+      touch(e.channel_id)
       mentions.value = { ...mentions.value, [e.channel_id]: (mentions.value[e.channel_id] ?? 0) + 1 }
     })
 
@@ -350,8 +441,19 @@ export const useChatStore = defineStore('chat', () => {
       connectedBefore = true
     })
     window.addEventListener('focus', onFocus)
+    window.addEventListener('online', onOnline)
+    document.addEventListener('visibilitychange', onVisibility)
+    document.addEventListener('pause', onNativePause)
+    document.addEventListener('resume', onNativeResume)
+    reconcileTimer = setInterval(reconcile, RECONCILE_MS)
     // Desktop app woke from sleep: give Wi-Fi a moment, then see what was missed.
     stopResume = desktopBridge()?.onResume?.(() => { setTimeout(() => catchUp('wake'), 3000) }) ?? null
+    // Desktop app window shown / hidden in the tray / minimised.
+    stopDesktopVisibility = desktopBridge()?.onVisibility?.((shown) => {
+      desktopShown.value = shown
+      if (shown) onShown()
+      else hiddenSince ??= Date.now()
+    }) ?? null
   }
 
   function stop() {
@@ -367,7 +469,19 @@ export const useChatStore = defineStore('chat', () => {
     typing.value = {}
     stopConnected?.()
     stopConnected = null
-    if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('online', onOnline)
+      document.removeEventListener('visibilitychange', onVisibility)
+      document.removeEventListener('pause', onNativePause)
+      document.removeEventListener('resume', onNativeResume)
+    }
+    if (reconcileTimer) clearInterval(reconcileTimer)
+    reconcileTimer = null
+    hiddenSince = null
+    stopDesktopVisibility?.()
+    stopDesktopVisibility = null
+    desktopShown.value = null
     stopResume?.()
     stopResume = null
     started = null

@@ -103,6 +103,10 @@ function isAppUrl(url) {
   try { return new URL(url).origin === APP_ORIGIN } catch { return false }
 }
 
+function isShown() {
+  return !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()
+}
+
 function createWindow({ hidden = false } = {}) {
   win = new BrowserWindow({
     width: 1280,
@@ -131,6 +135,10 @@ function createWindow({ hidden = false } = {}) {
 
   win.webContents.on('page-title-updated', (_e, title) => applyBadge(title))
   win.on('focus', () => win.flashFrame(false))
+
+  // Tell the page when it goes on / off screen, so a chat only counts as read while it can be seen.
+  const sendShown = () => { if (win && !win.isDestroyed()) win.webContents.send('desktop:visibility', isShown()) }
+  for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, sendShown)
 
   // Only the app itself loads in this window; every other link opens in the default browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -212,6 +220,7 @@ app.whenReady().then(() => {
   ipcMain.handle('desktop:set-launch-at-login', (_e, on) => setLaunchAtLogin(!!on))
   // Clicking a notification while the window is hidden in the tray: bring it back.
   ipcMain.on('desktop:show-window', () => showWindow())
+  ipcMain.handle('desktop:is-shown', () => isShown())
 
   // First run of an installed build: start at login unless the person turned it off before.
   if (app.isPackaged && readSettings().launchAtLogin === undefined) setLaunchAtLogin(true)
