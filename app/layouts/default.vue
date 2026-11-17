@@ -51,6 +51,7 @@ async function toggleNotifications() {
 }
 
 const onOff = (v: boolean) => (v ? 'On' : 'Off')
+const soundsOpen = ref(false)
 
 async function togglePush() {
   try {
@@ -116,7 +117,7 @@ const items = computed(() => [
         { label: `Desktop notifications: ${notificationState()}`, icon: 'i-lucide-bell', onSelect: toggleNotifications },
         { label: 'Send a test notification', icon: 'i-lucide-bell-ring', onSelect: sendTest },
         ...(push.supported.value ? [{ label: `Notify when the app is closed: ${onOff(push.active.value)}`, icon: 'i-lucide-bell-dot', onSelect: togglePush }] : []),
-        { label: `Notification sound: ${onOff(notifier.prefs.value.sound)}`, icon: 'i-lucide-volume-2', onSelect: () => notifier.set('sound', !notifier.prefs.value.sound) },
+        { label: `Notification sounds: ${onOff(notifier.prefs.value.sound)}…`, icon: 'i-lucide-volume-2', onSelect: () => { soundsOpen.value = true } },
         { label: `Message previews: ${onOff(notifier.prefs.value.preview)}`, icon: 'i-lucide-eye', onSelect: togglePreview },
       ]]
     : []),
@@ -184,6 +185,7 @@ const items = computed(() => [
         <UButton size="xs" color="neutral" variant="ghost" @click="notifier.set('dismissed', true)">Not now</UButton>
       </span>
     </div>
+    <NotificationSoundsModal v-model:open="soundsOpen" />
     <div class="flex min-h-0 flex-1">
       <div v-if="menuOpen" class="fixed inset-0 z-30 bg-black/60 md:hidden" @click="menuOpen = false" />
       <div

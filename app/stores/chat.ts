@@ -231,10 +231,11 @@ export const useChatStore = defineStore('chat', () => {
     })
     console.debug('[notify]', decision.notify ? 'showing' : 'skipped', '-', decision.reason)
     if (!decision.notify) return
+    const category = toneCategory({ kind: channel.kind, mentionsMe })
     if (push.active.value) {
       // The service worker shows the notification (also when this tab is open but not focused); don't double up.
       // It plays the system sound itself unless a CompanyChat window is visible, so only chime when we are.
-      if (document.visibilityState === 'visible') notifier.chime()
+      if (document.visibilityState === 'visible') notifier.chime(category)
       return
     }
     const text = notificationText({
@@ -245,7 +246,7 @@ export const useChatStore = defineStore('chat', () => {
       nameOf: userName,
       fallback: messageSummary(m as Parameters<typeof messageSummary>[0]),
     })
-    void notifier.show({ channelId: channel.id, ...text }).then((problem) => {
+    void notifier.show({ channelId: channel.id, category, ...text }).then((problem) => {
       if (problem) console.debug('[notify] not shown:', problem)
     })
   }
@@ -278,7 +279,9 @@ export const useChatStore = defineStore('chat', () => {
       console.debug('[notify] catch-up after', reason, summary ? `- ${summary.count} missed` : '- nothing missed')
       if (!summary || push.active.value) return // with push on, the service worker already showed them
       const first = summary.channelIds[0]!
-      const problem = await notifier.show({ channelId: 'catch-up', url: `/c/${first}`, forcePreview: true, ...catchUpText(summary) })
+      const missedDm = channels.value.some((c) => c.kind === 'dm' && summary.channelIds.includes(c.id))
+      const category = summary.mentions ? 'mention' : missedDm ? 'dm' : 'channel'
+      const problem = await notifier.show({ channelId: 'catch-up', url: `/c/${first}`, forcePreview: true, category, ...catchUpText(summary) })
       if (problem) console.debug('[notify] catch-up not shown:', problem)
     })().finally(() => { catchingUp = null })
   }

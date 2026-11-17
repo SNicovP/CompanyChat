@@ -17,18 +17,24 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
 /** The signed-in person's own profile. */
 class ProfileController extends Controller
 {
+    /** Kinds of message that can each have their own notification tone. */
+    private const TONE_KINDS = ['dm', 'mention', 'channel'];
+
     public function show(Request $request): UserResource
     {
-        return new UserResource($request->user());
+        return (new UserResource($request->user()))->withSettings();
     }
 
-    /** Name, avatar and status only; the role is never self-editable. */
+    /** Name, avatar, status and notification tones; the role is never self-editable. */
     public function update(Request $request): UserResource
     {
         $data = $request->validate([
             'display_name' => ['sometimes', 'string', 'min:1', 'max:80'],
             'avatar_url' => ['sometimes', 'nullable', 'url', 'max:255'],
             'status' => ['sometimes', Rule::enum(UserStatus::class)],
+            // Tone ids are the app's (app/utils/tones.ts); an id it no longer knows falls back to its default there.
+            'notification_tones' => ['sometimes', 'nullable', 'array:'.implode(',', self::TONE_KINDS)],
+            'notification_tones.*' => ['string', 'alpha_dash', 'max:32'],
         ]);
         if (isset($data['display_name'])) {
             $data['display_name'] = trim($data['display_name']);
@@ -36,11 +42,12 @@ class ProfileController extends Controller
 
         $user = $request->user();
         $user->fill($data)->save();
-        if ($user->wasChanged()) {
+        // Tones are private: only tell others when something they can see changed.
+        if ($user->wasChanged(['display_name', 'avatar_url', 'status'])) {
             Realtime::send(new ProfileUpdated($user));
         }
 
-        return new UserResource($user);
+        return (new UserResource($user))->withSettings();
     }
 
     /** Change your password while signed in (needs the current one). Other devices are signed out. */

@@ -28,7 +28,7 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasUuids, Notifiable;
 
-    protected $fillable = ['email', 'display_name', 'avatar_url', 'status', 'password'];
+    protected $fillable = ['email', 'display_name', 'avatar_url', 'status', 'notification_tones', 'password'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -44,6 +44,7 @@ class User extends Authenticatable
             'app_role' => AppRole::class,
             'status' => UserStatus::class,
             'is_active' => 'boolean',
+            'notification_tones' => 'array',
             'joined_at' => 'datetime',
             'last_sign_in_at' => 'datetime',
             'password' => 'hashed',
