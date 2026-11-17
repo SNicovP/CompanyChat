@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import type { ContextMenuItem } from '@nuxt/ui'
 import type { ApiAttachment, ApiMessage, ApiShare } from '~/types/api'
+import { namesSummary } from '~/utils/mesh'
 import { webrtcSupported } from '~/utils/peer'
 import type { AttachAction } from '~/components/AttachMenu.vue'
 import type { ChannelEvent } from '~/stores/chat'
@@ -567,6 +569,31 @@ async function remove(m: Message) {
   }
 }
 
+async function copyText(m: Message) {
+  try {
+    await navigator.clipboard.writeText(tokensToDisplay(m.body, (id) => chat.userName(id)).text)
+    toast.add({ title: 'Copied', icon: 'i-lucide-copy', duration: 1500 })
+  } catch (error) {
+    toast.add({ title: 'Could not copy', description: errorMessage(error), color: 'error' })
+  }
+}
+
+// Right-click (or long-press on touch) menu on a message: the same actions as the hover toolbar, plus copy.
+function messageMenu(m: Message) {
+  const items: ContextMenuItem[] = []
+  if (!readOnly.value) items.push({ label: 'Reply', icon: 'i-lucide-reply', onSelect: () => startReply(m) })
+  if (m.body) items.push({ label: 'Copy text', icon: 'i-lucide-copy', onSelect: () => copyText(m) })
+  if (m.user_id === chat.myId) {
+    items.push({ label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => startEdit(m) })
+    items.push({ label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => { if (confirm('Delete this message? It is removed for everyone, with any files attached.')) remove(m) } })
+  }
+  return items
+}
+
+// Let the browser's own menu through where it is more useful: in the edit box, on a link, or over selected text.
+const nativeMenuTarget = (e: Event) =>
+  !!(e.target as HTMLElement | null)?.closest('a, textarea, input') || !!window.getSelection()?.toString()
+
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { timeStyle: 'short' })
 
 function dayLabel(iso: string) {
@@ -605,6 +632,19 @@ async function removeProject() {
   }
 }
 
+// Blocking (either way) closes a DM: history stays, but no new messages or calls.
+const blocks = useBlocksStore()
+const dmPartner = computed(() => (channel.value?.kind === 'dm' ? chat.otherUser(channel.value)?.id : undefined))
+const blockedWhy = computed(() => blocks.reason(dmPartner.value))
+
+// Group calls and announcements (project channels you can post in).
+const rooms = useRoomsStore()
+const announceOpen = ref(false)
+const roomsAllowed = computed(() => import.meta.client && webrtcSupported() && !readOnly.value)
+const liveCall = computed(() => (channel.value?.kind === 'project' ? rooms.callIn(channel.value.id) : undefined))
+const liveAnnouncement = computed(() => (channel.value?.kind === 'project' ? rooms.announcementIn(channel.value.id) : undefined))
+const inLiveCall = computed(() => !!liveCall.value && rooms.current?.id === liveCall.value.id)
+
 // Voice calls (DMs only): the other person must still be active, and this device must be able to make calls.
 const calls = useCallStore()
 const callable = computed(() => {
@@ -621,7 +661,9 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
     <div class="flex items-center justify-between border-b border-accented bg-default px-4 py-2.5">
       <div class="flex min-w-0 items-center gap-2">
         <template v-if="channel?.kind === 'dm'">
-          <UserAvatar :name="chat.channelTitle(channel)" :status="chat.displayStatus(chat.otherUser(channel)?.id)" size="sm" ring="default" />
+          <UserMenu :user-id="chat.otherUser(channel)?.id">
+            <UserAvatar :name="chat.channelTitle(channel)" :status="chat.displayStatus(chat.otherUser(channel)?.id)" size="sm" ring="default" />
+          </UserMenu>
           <div class="min-w-0">
             <span class="block truncate text-base font-semibold leading-tight text-highlighted">{{ chat.channelTitle(channel) }}</span>
             <!-- like WhatsApp: "typing…" replaces their status while they type -->
@@ -637,7 +679,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         </template>
         <span v-else class="text-muted">…</span>
       </div>
-      <div v-if="channel?.kind === 'dm' && callable" class="flex items-center gap-1">
+      <div v-if="channel?.kind === 'dm' && callable && !blockedWhy" class="flex items-center gap-1">
         <UButton
           icon="i-lucide-phone"
           size="sm"
@@ -650,6 +692,41 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         />
       </div>
       <div v-if="channel?.kind === 'project'" class="flex items-center gap-1">
+        <template v-if="roomsAllowed">
+          <UButton
+            v-if="liveCall"
+            icon="i-lucide-phone"
+            size="sm"
+            color="success"
+            variant="soft"
+            :disabled="inLiveCall || calls.busy"
+            :title="inLiveCall ? 'You are in this call' : 'Join the call going on here'"
+            @click="rooms.join(liveCall.id)"
+          >
+            <span class="hidden sm:inline">{{ inLiveCall ? 'In call' : 'Join' }}</span> {{ liveCall.participants.length }}
+          </UButton>
+          <UButton
+            v-else
+            icon="i-lucide-phone"
+            size="sm"
+            color="neutral"
+            variant="ghost"
+            :disabled="calls.busy || rooms.talking"
+            title="Start a group call (up to 6 people)"
+            aria-label="Start a group call"
+            @click="rooms.startCall(channel.id)"
+          />
+          <UButton
+            icon="i-lucide-megaphone"
+            size="sm"
+            color="neutral"
+            variant="ghost"
+            :disabled="calls.busy || rooms.talking || !!liveAnnouncement"
+            :title="liveAnnouncement ? `${chat.userName(liveAnnouncement.started_by)} is announcing here` : 'Announce: your voice plays live for everyone here who is online'"
+            aria-label="Make an announcement"
+            @click="announceOpen = true"
+          />
+        </template>
         <UButton
           :icon="watching ? 'i-lucide-bell-ring' : 'i-lucide-bell'"
           size="sm"
@@ -665,6 +742,35 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         <UButton v-if="chat.canManageChannel(channel)" icon="i-lucide-archive" size="sm" color="neutral" variant="ghost" title="Archive project" aria-label="Archive project" @click="deleteOpen = true" />
       </div>
     </div>
+
+    <div
+      v-if="liveCall && !inLiveCall"
+      class="flex items-center gap-3 border-b border-accented bg-success/10 px-4 py-2 text-sm"
+      role="status"
+    >
+      <UIcon name="i-lucide-phone-call" class="size-4 shrink-0 text-success" />
+      <span class="min-w-0 flex-1 truncate">
+        <strong class="font-semibold text-highlighted">Group call</strong>
+        <span class="text-muted"> · {{ namesSummary(liveCall.participants.map((p) => chat.userName(p.user_id)), 3) }}</span>
+      </span>
+      <UButton size="xs" color="success" icon="i-lucide-phone" :disabled="calls.busy || rooms.talking" @click="rooms.join(liveCall.id)">Join</UButton>
+    </div>
+
+    <UModal v-if="channel?.kind === 'project'" v-model:open="announceOpen" title="Make an announcement" :description="`Your voice plays live for everyone in ${chat.channelTitle(channel)} who is online.`">
+      <template #body>
+        <ul class="list-disc space-y-1 pl-5 text-sm text-muted">
+          <li>People hear you straight away, without answering. They can't talk back.</li>
+          <li>Anyone on Do not disturb or already on a call won't hear it.</li>
+          <li>An announcement lasts at most 5 minutes.</li>
+        </ul>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton color="neutral" variant="ghost" @click="announceOpen = false">Cancel</UButton>
+          <UButton icon="i-lucide-megaphone" @click="announceOpen = false; rooms.announce(channel.id)">Start announcing</UButton>
+        </div>
+      </template>
+    </UModal>
 
     <UModal v-if="channel?.kind === 'project'" v-model:open="deleteOpen" title="Archive project">
       <template #body>
@@ -699,13 +805,17 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           <div v-if="r.newDay" class="flex items-center gap-3 py-3 text-xs font-medium text-muted">
             <span class="h-px flex-1 bg-accented" />{{ r.dayLabel }}<span class="h-px flex-1 bg-accented" />
           </div>
+          <UContextMenu :items="messageMenu(r.m)" :disabled="!!r.m.pending || editingId === r.m.id">
           <div
             :data-message-id="r.m.id"
-            tabindex="0" class="group relative flex gap-3 rounded-md px-2 py-0.5 outline-none transition-colors duration-700 hover:bg-muted/70"
+            tabindex="0" class="group relative flex gap-3 rounded-md px-2 py-0.5 outline-none transition-colors duration-700 hover:bg-muted/70 data-[state=open]:bg-muted/70"
             :class="[r.grouped ? '' : 'mt-3 first:mt-0', mentionsMe(r.m) ? 'border-l-2 border-primary bg-primary/5' : '', highlightId === r.m.id ? 'bg-primary/20!' : '', r.m.pending ? 'opacity-60' : '']"
+            @contextmenu.capture="nativeMenuTarget($event) && $event.stopPropagation()"
           >
             <div class="w-9 shrink-0 pt-0.5">
-              <UserAvatar v-if="!r.grouped" :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
+              <UserMenu v-if="!r.grouped" :user-id="r.m.user_id">
+                <UserAvatar :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
+              </UserMenu>
               <span v-else class="hidden pt-1 text-right text-[10px] leading-5 text-dimmed group-hover:block group-focus-within:block">{{ clock(r.m.created_at) }}</span>
             </div>
             <span
@@ -719,7 +829,9 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             </span>
             <div class="min-w-0 flex-1">
               <div v-if="!r.grouped" class="flex items-baseline gap-2">
-                <span class="font-semibold text-highlighted">{{ chat.userName(r.m.user_id) }}</span>
+                <UserMenu :user-id="r.m.user_id">
+                  <span class="font-semibold text-highlighted">{{ chat.userName(r.m.user_id) }}</span>
+                </UserMenu>
                 <span class="text-xs text-muted">{{ time(r.m.created_at) }}<span v-if="r.m.edited_at"> (edited)</span></span>
               </div>
               <div
@@ -771,6 +883,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               <LocationCard v-if="r.m.share?.type === 'location'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" :sent-at="r.m.created_at" />
               <ContactCard v-else-if="r.m.share?.type === 'contact'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" />
               <CallCard v-else-if="r.m.share?.type === 'call'" :share="r.m.share" :caller-id="r.m.user_id" :channel-id="r.m.channel_id" />
+              <GroupCallCard v-else-if="r.m.share?.type === 'group_call'" :share="r.m.share" :channel-id="r.m.channel_id" />
               <MessageAttachments
                 v-if="r.m.message_attachments?.length"
                 :attachments="r.m.message_attachments"
@@ -782,11 +895,17 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               />
             </div>
           </div>
+          </UContextMenu>
         </template>
         <TypingBubble v-if="typingNames.length" :names="typingNames" />
       </div>
 
-      <div v-if="readOnly" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted">
+      <div v-if="blockedWhy" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted" role="status">
+        <UIcon name="i-lucide-ban" class="size-4 shrink-0" />
+        <span class="flex-1">{{ blockedWhy }} You can't message or call each other.</span>
+        <UButton v-if="blocks.iBlocked(dmPartner)" size="xs" color="neutral" variant="soft" @click="blocks.unblock(dmPartner!)">Unblock</UButton>
+      </div>
+      <div v-else-if="readOnly" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted">
         <UIcon name="i-lucide-eye" class="size-4 shrink-0" />
         You have read-only access to this project. Use a direct message to ask someone about it.
       </div>

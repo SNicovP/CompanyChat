@@ -1,7 +1,7 @@
 // CompanyChat desktop shell. It loads the live web app, so every deploy reaches the desktop app too.
 // It adds what a browser tab cannot: a Dock/taskbar badge, staying running when the window is closed,
 // native notifications that work while the app is in the background, starting at login, and links opening in your browser.
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, ipcMain, powerMonitor } = require('electron')
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, session, ipcMain, powerMonitor, systemPreferences } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 
@@ -222,6 +222,16 @@ app.whenReady().then(() => {
   // Clicking a notification while the window is hidden in the tray: bring it back.
   ipcMain.on('desktop:show-window', () => showWindow())
   ipcMain.handle('desktop:is-shown', () => isShown())
+  // macOS keeps its own camera/microphone switch per app (System Settings › Privacy & Security). Until the app has
+  // asked, getUserMedia just fails; asking shows the system prompt once (with the Info.plist usage text).
+  ipcMain.handle('desktop:ask-media-access', async (_e, kind) => {
+    if (process.platform !== 'darwin') return true
+    if (kind !== 'microphone' && kind !== 'camera') return false
+    const status = systemPreferences.getMediaAccessStatus(kind)
+    if (status === 'granted') return true
+    if (status === 'not-determined') return systemPreferences.askForMediaAccess(kind)
+    return false // denied or restricted: only the person can turn it on in System Settings
+  })
 
   // First run of an installed build: start at login unless the person turned it off before.
   if (app.isPackaged && readSettings().launchAtLogin === undefined) setLaunchAtLogin(true)

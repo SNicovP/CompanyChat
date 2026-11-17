@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { ApiCall } from '~/types/api'
 import { CALL_AUDIO, CallPeer, NETWORK_HINT, endedNotice, webrtcSupported, type Signal } from '~/utils/peer'
+import { mediaErrorMessage, requestMedia } from '~/utils/recording'
 import { RINGBACK, RING_REPEAT_MS, playNotes, type Note } from '~/utils/tones'
 
 /**
@@ -101,14 +102,10 @@ export const useCallStore = defineStore('call', () => {
 
   async function microphone(): Promise<MediaStream | null> {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: CALL_AUDIO })
+      return await requestMedia({ audio: CALL_AUDIO })
     } catch (e) {
-      const denied = e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
-      toast.add({
-        title: 'Microphone unavailable',
-        description: denied ? 'Allow microphone access for CompanyChat, then try again.' : 'No microphone was found, or another app is using it.',
-        color: 'error',
-      })
+      console.warn('[call] microphone', e)
+      toast.add({ title: 'Microphone unavailable', description: mediaErrorMessage(e, 'microphone'), color: 'error', duration: 12_000 })
       return null
     }
   }
@@ -247,7 +244,7 @@ export const useCallStore = defineStore('call', () => {
 
   function onInvited(c: ApiCall) {
     if (c.callee_id !== chat.myId) return
-    if (busy.value) return // on a call on this device; the API only lets the call through if we are not "busy"
+    if (busy.value || useRoomsStore().talking) return // on a call on this device; the API only lets the call through if we are not "busy"
     call.value = c
     phase.value = 'incoming'
     ring('incoming')
@@ -282,7 +279,8 @@ export const useCallStore = defineStore('call', () => {
 
   /** Call the other person in a DM. */
   async function start(channelId: string) {
-    if (busy.value) {
+    const rooms = useRoomsStore()
+    if (busy.value || rooms.talking) {
       toast.add({ title: 'You are already on a call' })
       return
     }
@@ -290,6 +288,7 @@ export const useCallStore = defineStore('call', () => {
       toast.add({ title: 'Calls are not supported here', description: 'This browser cannot make voice calls.', color: 'error' })
       return
     }
+    if (rooms.listening) await rooms.leave() // stop hearing an announcement to make a call
     const target = chat.channels.find((c) => c.id === channelId)
     dialing.value = target ? chat.otherUser(target)?.id ?? null : null
     phase.value = 'outgoing'
@@ -329,6 +328,8 @@ export const useCallStore = defineStore('call', () => {
     ring(null)
     clearTimer('incoming')
     phase.value = 'connecting'
+    const rooms = useRoomsStore()
+    if (rooms.listening) await rooms.leave()
 
     const mic = await microphone()
     if (!mic) {

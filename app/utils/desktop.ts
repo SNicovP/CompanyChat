@@ -7,6 +7,8 @@ export interface DesktopBridge {
   onResume?: (cb: () => void) => () => void
   /** Window shown (true) or hidden in the tray / minimised (false); called once straight away with the current state. */
   onVisibility?: (cb: (shown: boolean) => void) => () => void
+  /** macOS: ask the system for camera/microphone access (prompts once); false if it is turned off in System Settings. */
+  askMediaAccess?: (kind: 'camera' | 'microphone') => Promise<boolean>
 }
 
 export function desktopBridge(): DesktopBridge | undefined {

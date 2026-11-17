@@ -26,9 +26,9 @@ async function start() {
     return emit('cancel')
   }
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+    stream = await requestMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
   } catch (e) {
-    toast.add({ title: 'Microphone unavailable', description: mediaErrorMessage(e, 'microphone'), color: 'error' })
+    toast.add({ title: 'Microphone unavailable', description: mediaErrorMessage(e, 'microphone'), color: 'error', duration: 12_000 })
     return emit('cancel')
   }
   const mimeType = pickRecordingType('audio')

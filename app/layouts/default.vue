@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { webrtcSupported } from '~/utils/peer'
 import { STATUS_OPTIONS, effectiveStatus } from '~/utils/status'
 
 const auth = useAuth()
@@ -107,6 +108,13 @@ async function sendTest() {
   )
 }
 
+// Admins can make a live announcement to everyone online (see stores/rooms.ts).
+const rooms = useRoomsStore()
+const calls = useCallStore()
+const announceAllOpen = ref(false)
+const canAnnounce = ref(false)
+onMounted(() => { canAnnounce.value = webrtcSupported() })
+
 const items = computed(() => [
   STATUS_OPTIONS.map((s) => ({
     label: s.label,
@@ -132,7 +140,12 @@ const items = computed(() => [
     ? [[{ label: `Start at login: ${onOff(launchAtLogin.value.on)}`, icon: 'i-lucide-power', onSelect: toggleLaunchAtLogin }]]
     : []),
   ...(installer.canInstall.value ? [[{ label: 'Install app', icon: 'i-lucide-download', onSelect: installer.install }]] : []),
-  ...(store.isAdmin ? [[{ label: 'Manage users', icon: 'i-lucide-shield', to: '/admin/users' }]] : []),
+  ...(store.isAdmin
+    ? [[
+        { label: 'Manage users', icon: 'i-lucide-shield', to: '/admin/users' },
+        ...(canAnnounce.value ? [{ label: 'Announce to everyone…', icon: 'i-lucide-megaphone', disabled: calls.busy || rooms.talking, onSelect: () => { announceAllOpen.value = true } }] : []),
+      ]]
+    : []),
   [{
     label: 'Sign out',
     icon: 'i-lucide-log-out',
@@ -193,7 +206,23 @@ const items = computed(() => [
       </span>
     </div>
     <NotificationSoundsModal v-model:open="soundsOpen" />
-    <ClientOnly><CallOverlay /></ClientOnly>
+    <ClientOnly><CallOverlay /><RoomOverlay /></ClientOnly>
+    <BlockConfirmModal />
+    <UModal v-model:open="announceAllOpen" title="Announce to everyone" description="Your voice plays live for everyone who is online, up to 30 people.">
+      <template #body>
+        <ul class="list-disc space-y-1 pl-5 text-sm text-muted">
+          <li>People hear you straight away, without answering. They can't talk back.</li>
+          <li>Anyone on Do not disturb or already on a call won't hear it.</li>
+          <li>An announcement lasts at most 5 minutes.</li>
+        </ul>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton color="neutral" variant="ghost" @click="announceAllOpen = false">Cancel</UButton>
+          <UButton icon="i-lucide-megaphone" @click="announceAllOpen = false; rooms.announce(null)">Start announcing</UButton>
+        </div>
+      </template>
+    </UModal>
     <div class="flex min-h-0 flex-1">
       <div v-if="menuOpen" class="fixed inset-0 z-30 bg-black/60 md:hidden" @click="menuOpen = false" />
       <div

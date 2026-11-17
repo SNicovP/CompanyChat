@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('companychatDesktop', {
   getLaunchAtLogin: () => ipcRenderer.invoke('desktop:get-launch-at-login'),
   setLaunchAtLogin: (on) => ipcRenderer.invoke('desktop:set-launch-at-login', !!on),
   showWindow: () => ipcRenderer.send('desktop:show-window'),
+  askMediaAccess: (kind) => ipcRenderer.invoke('desktop:ask-media-access', kind),
   onResume: (cb) => {
     const listener = () => cb()
     ipcRenderer.on('desktop:resumed', listener)

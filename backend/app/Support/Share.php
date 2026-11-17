@@ -9,6 +9,7 @@ use Illuminate\Validation\Rule;
  *   location: { type, lat, lng, label? }
  *   contact:  { type, name, phone?, email?, org?, user_id? }   (user_id: a CompanyChat person)
  *   call:     { type, status, duration? }   written by the server when a call ends (see App\Support\Calls), never sent by apps
+ *   group_call: { type, duration, people }   written by the server when a group call ends (see App\Support\Rooms)
  */
 class Share
 {
@@ -50,6 +51,7 @@ class Share
         return match ($share['type'] ?? null) {
             'location' => '📍 '.($share['label'] ?? 'Location'),
             'contact' => '👤 '.($share['name'] ?? 'Contact'),
+            'group_call' => '📞 Group call',
             'call' => match ($share['status'] ?? null) {
                 'ended' => '📞 Voice call',
                 'missed', 'cancelled' => '📞 Missed call',

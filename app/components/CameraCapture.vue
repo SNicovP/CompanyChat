@@ -31,7 +31,7 @@ async function startCamera() {
     return fallback()
   }
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    stream = await requestMedia({
       video: { facingMode: facing.value, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: props.mode === 'video',
     })

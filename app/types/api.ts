@@ -73,8 +73,34 @@ export interface ApiCallShare {
   duration?: number
 }
 
+/** Written by the server when a group call in a project channel ends (the author started the call). */
+export interface ApiGroupCallShare {
+  type: 'group_call'
+  duration: number
+  /** how many people took part */
+  people: number
+}
+
 /** A location or contact card on a message (voice notes, photos and videos are attachments), or a call-history entry. */
-export type ApiShare = ApiLocationShare | ApiContactShare | ApiCallShare
+export type ApiShare = ApiLocationShare | ApiContactShare | ApiCallShare | ApiGroupCallShare
+
+export type RoomRole = 'member' | 'speaker' | 'listener'
+
+/** A group call in a project channel, or a live announcement (to a channel, or to everyone when channel_id is null). */
+export interface ApiRoom {
+  id: string
+  kind: 'call' | 'announcement'
+  channel_id: string | null
+  /** intercom: the one person who hears this announcement */
+  target_user_id: string | null
+  started_by: string
+  status: 'live' | 'ended'
+  created_at: string
+  ended_at: string | null
+  /** who is in it now */
+  participants: { user_id: string; role: RoomRole }[]
+  ice_servers?: RTCIceServer[]
+}
 
 /** A 1:1 voice call in a DM. */
 export interface ApiCall {

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AttachmentController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BlockController;
 use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\ChannelController;
 use App\Http\Controllers\Api\ClientController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\PushSubscriptionController;
+use App\Http\Controllers\Api\RoomController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WatchController;
@@ -54,6 +56,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::put('me/password', [ProfileController::class, 'updatePassword']);
 
     Route::get('users', [UserController::class, 'index']);
+    Route::get('blocks', [BlockController::class, 'index']);
+    Route::put('users/{user}/block', [BlockController::class, 'store']);
+    Route::delete('users/{user}/block', [BlockController::class, 'destroy']);
 
     Route::get('clients', [ClientController::class, 'index']);
     Route::post('clients', [ClientController::class, 'store']);
@@ -105,6 +110,14 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('calls/{call}/reject', [CallController::class, 'reject']);
     Route::post('calls/{call}/end', [CallController::class, 'end']);
     Route::post('calls/{call}/ping', [CallController::class, 'ping']);
+
+    // group calls in project channels and live announcements (audio peer to peer, see RoomController)
+    Route::get('rooms/live', [RoomController::class, 'index']);
+    Route::post('rooms', [RoomController::class, 'store'])->middleware('throttle:calls');
+    Route::post('rooms/{room}/join', [RoomController::class, 'join']);
+    Route::post('rooms/{room}/leave', [RoomController::class, 'leave']);
+    Route::post('rooms/{room}/end', [RoomController::class, 'end']);
+    Route::post('rooms/{room}/ping', [RoomController::class, 'ping']);
 
     Route::post('push-subscriptions', [PushSubscriptionController::class, 'store']);
     Route::patch('push-subscriptions', [PushSubscriptionController::class, 'update']);
