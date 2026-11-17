@@ -103,7 +103,10 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
       <div class="flex items-center gap-2.5 px-2 py-1 text-base font-semibold text-highlighted">
         <UIcon name="i-lucide-briefcase" class="size-5 shrink-0" />Clients &amp; projects
       </div>
-      <p v-if="chat.loaded && !chat.clients.length" class="px-2 py-1 pl-9 text-sm text-muted">No clients yet.</p>
+      <div v-if="!chat.loaded" class="space-y-2 px-2 pl-9 pt-2" aria-hidden="true">
+        <div class="h-4 w-28 animate-pulse rounded bg-accented" /><div class="h-4 w-20 animate-pulse rounded bg-accented" />
+      </div>
+      <p v-else-if="!chat.clients.length" class="px-2 py-1 pl-9 text-sm text-muted">No clients yet.</p>
       <div v-for="client in chat.clients" :key="client.id" class="mt-2">
         <div class="flex items-center gap-1 pl-1.5 pr-2 py-0.5">
           <button
@@ -146,7 +149,7 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
           </button>
         </div>
       </div>
-      <button v-if="canCreateClient" type="button" class="mt-2 flex w-full items-center gap-2.5 rounded-md py-1.5 pl-2 pr-2 text-left text-base text-muted hover:bg-accented/60 hover:text-highlighted" @click="newClientOpen = true">
+      <button v-if="chat.loaded && canCreateClient" type="button" class="mt-2 flex w-full items-center gap-2.5 rounded-md py-1.5 pl-2 pr-2 text-left text-base text-muted hover:bg-accented/60 hover:text-highlighted" @click="newClientOpen = true">
         <span class="inline-flex size-5 items-center justify-center rounded bg-accented"><UIcon name="i-lucide-plus" class="size-3.5" /></span>Add client
       </button>
     </section>
@@ -157,7 +160,10 @@ const canCreateProject = (clientId: string) => chat.canManageClient(clientId)
       <div class="flex items-center gap-2.5 px-2 py-1 text-base font-semibold text-highlighted">
         <UIcon name="i-lucide-messages-square" class="size-5 shrink-0" />Direct messages
       </div>
-      <div class="space-y-0.5">
+      <div v-if="!chat.loaded" class="space-y-2 px-2 pl-9 pt-2" aria-hidden="true">
+        <div class="h-4 w-24 animate-pulse rounded bg-accented" />
+      </div>
+      <div v-else class="space-y-0.5">
         <NuxtLink
           v-for="dm in chat.dms"
           :key="dm.id"

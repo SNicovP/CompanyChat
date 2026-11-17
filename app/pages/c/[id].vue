@@ -577,8 +577,9 @@ function dayLabel(iso: string) {
 }
 
 // Day dividers, and consecutive messages from one person within 5 minutes share a single header.
+// Until the people and channels have loaded, names would show as "Unknown": show nothing instead.
 const rows = computed(() =>
-  messages.value.map((m, i) => {
+  (!chat.loaded ? [] : messages.value).map((m, i) => {
     const prev = messages.value[i - 1]
     const newDay = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString()
     const grouped = !newDay && !!prev && prev.user_id === m.user_id && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000
@@ -672,7 +673,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
 
     <template v-else>
       <div ref="scroller" class="flex-1 overflow-y-auto px-4 py-3">
-        <p v-if="loading" class="text-muted">Loading…</p>
+        <p v-if="loading || !chat.loaded" class="text-muted">Loading…</p>
         <p v-else-if="!messages.length" class="text-muted">No messages yet. Say hello!</p>
         <template v-for="r in rows" :key="r.m.id">
           <div v-if="r.newDay" class="flex items-center gap-3 py-3 text-xs font-medium text-muted">
