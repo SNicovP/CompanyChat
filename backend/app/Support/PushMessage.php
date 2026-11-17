@@ -16,21 +16,21 @@ class PushMessage
         return mb_strlen($flat) > $max ? mb_substr($flat, 0, $max - 1).'…' : $flat;
     }
 
-    /** "@[uuid]" tokens become "@Name"; an empty (attachment-only) message says so. */
-    public static function readableBody(string $body, callable $nameOf): string
+    /** "@[uuid]" tokens become "@Name"; a message with no text says what it carries ("🎤 Voice note"). */
+    public static function readableBody(string $body, callable $nameOf, ?string $fallback = null): string
     {
         $text = preg_replace_callback(self::TOKEN, fn ($m) => strtolower($m[1]) === 'channel' ? '@channel' : '@'.$nameOf(strtolower($m[1])), $body);
 
-        return self::truncate($text) ?: 'Sent an attachment';
+        return self::truncate($text) ?: ($fallback ?? 'Sent an attachment');
     }
 
     /**
      * @param  'dm'|'mention'|'watch'  $kind
      * @return array{title: string, body: string, tag: string, url: string}
      */
-    public static function build(string $kind, string $channelId, string $channelKind, ?string $channelName, string $senderName, string $body, bool $showPreview, callable $nameOf): array
+    public static function build(string $kind, string $channelId, string $channelKind, ?string $channelName, string $senderName, string $body, bool $showPreview, callable $nameOf, ?string $fallback = null): array
     {
-        $text = self::readableBody($body, $nameOf);
+        $text = self::readableBody($body, $nameOf, $fallback);
         $url = "/c/{$channelId}";
         $tag = $channelId; // a newer message in the same channel replaces the older notification
 

@@ -16,6 +16,14 @@ class MessageAttachment extends Model
 
     public const MAX_BYTES = 10 * 1024 * 1024;
 
+    /** Videos (and long recordings) may be bigger than other files. */
+    public const MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+
+    public static function maxBytesFor(?string $mime): int
+    {
+        return str_starts_with((string) $mime, 'video/') || str_starts_with((string) $mime, 'audio/') ? self::MAX_MEDIA_BYTES : self::MAX_BYTES;
+    }
+
     protected $fillable = ['message_id', 'channel_id', 'path', 'file_name', 'mime_type', 'size_bytes'];
 
     protected $hidden = ['created_at', 'updated_at'];

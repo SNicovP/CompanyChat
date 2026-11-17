@@ -44,16 +44,37 @@ export interface ApiAttachment {
   deleted_at: string | null
 }
 
+export interface ApiLocationShare {
+  type: 'location'
+  lat: number
+  lng: number
+  label?: string
+}
+
+export interface ApiContactShare {
+  type: 'contact'
+  name: string
+  phone?: string
+  email?: string
+  org?: string
+  /** Set when the contact is someone in CompanyChat. */
+  user_id?: string
+}
+
+/** A location or contact card on a message (voice notes, photos and videos are attachments). */
+export type ApiShare = ApiLocationShare | ApiContactShare
+
 export interface ApiMessage {
   id: string
   channel_id: string
   user_id: string | null
   body: string
+  share: ApiShare | null
   created_at: string
   edited_at: string | null
   reply_to: string | null
   /** Enough of the quoted message to show a quote, even when it is older than the loaded page. */
-  reply_preview: { user_id: string | null; body: string; has_files: boolean } | null
+  reply_preview: { user_id: string | null; body: string; has_files: boolean; summary?: string | null } | null
   message_attachments?: ApiAttachment[]
 }
 

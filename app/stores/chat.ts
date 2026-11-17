@@ -243,6 +243,7 @@ export const useChatStore = defineStore('chat', () => {
       channelName: channel.name,
       body,
       nameOf: userName,
+      fallback: messageSummary(m as Parameters<typeof messageSummary>[0]),
     })
     void notifier.show({ channelId: channel.id, ...text }).then((problem) => {
       if (problem) console.debug('[notify] not shown:', problem)

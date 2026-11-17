@@ -32,16 +32,18 @@ export function truncate(text: string, max = 140): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
 }
 
-/** Notification text; mentions are shown by name and an attachment-only message says so. */
+/** Notification text; mentions are shown by name and a message without text says what it carries. */
 export function notificationText(opts: {
   kind: 'dm' | 'project'
   senderName: string
   channelName: string | null
   body: string
   nameOf: (id: string) => string
+  /** e.g. "🎤 Voice note" (see messageSummary) */
+  fallback?: string | null
 }): { title: string; body: string } {
   const readable = tokensToDisplay(opts.body, opts.nameOf).text
-  const text = truncate(readable) || 'Sent an attachment'
+  const text = truncate(readable) || opts.fallback || 'Sent an attachment'
   if (opts.kind === 'dm') return { title: opts.senderName, body: text }
   return { title: `# ${opts.channelName ?? 'channel'}`, body: `${opts.senderName}: ${text}` }
 }

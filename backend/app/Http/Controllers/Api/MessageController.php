@@ -15,6 +15,7 @@ use App\Support\Access;
 use App\Support\Attachments;
 use App\Support\Mentions;
 use App\Support\Realtime;
+use App\Support\Share;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -62,7 +63,8 @@ class MessageController extends Controller
     }
 
     /**
-     * Post a message, with optional files (multipart: body, files[]). The message and its files are saved
+     * Post a message, with optional files (multipart: body, files[]) and an optional shared location or contact
+     * (share[type]=location|contact, see App\Support\Share). The message and its files are saved
      * together, so a failed upload never leaves a half-sent message behind. Send the X-Socket-ID header so
      * your own socket does not also receive the broadcast.
      */
@@ -77,21 +79,26 @@ class MessageController extends Controller
             // the message being replied to, which must be in this same conversation
             'reply_to' => ['nullable', 'uuid', Rule::exists('messages', 'id')->where('channel_id', $channel->id)],
             'files' => ['nullable', 'array', 'max:'.Attachments::MAX_FILES_PER_MESSAGE],
-            'files.*' => ['file', 'max:'.(MessageAttachment::MAX_BYTES / 1024)],
+            'files.*' => ['file', 'max:'.(MessageAttachment::MAX_MEDIA_BYTES / 1024)],
+            ...Share::rules(),
         ]);
         $body = trim($data['body'] ?? '');
+        $share = Share::clean($data['share'] ?? null);
         $files = $request->file('files', []);
-        abort_if($body === '' && ! $files, 422, 'Write a message or attach a file.');
+        abort_if($body === '' && ! $files && ! $share, 422, 'Write a message or attach a file.');
         foreach ($files as $file) {
-            abort_if($file->getSize() === 0, 422, "{$file->getClientOriginalName()} is empty.");
+            $name = $file->getClientOriginalName();
+            abort_if($file->getSize() === 0, 422, "{$name} is empty.");
+            $limit = MessageAttachment::maxBytesFor(Attachments::mimeOf($file));
+            abort_if($file->getSize() > $limit, 422, "{$name} is larger than ".($limit / 1024 / 1024).' MB.');
         }
 
         $disk = Attachments::disk();
         $written = [];
         $mentioned = [];
         try {
-            $message = DB::transaction(function () use ($channel, $user, $body, $data, $files, $disk, &$written, &$mentioned) {
-                $message = Message::create(['channel_id' => $channel->id, 'user_id' => $user->id, 'body' => $body, 'reply_to' => $data['reply_to'] ?? null]);
+            $message = DB::transaction(function () use ($channel, $user, $body, $share, $data, $files, $disk, &$written, &$mentioned) {
+                $message = Message::create(['channel_id' => $channel->id, 'user_id' => $user->id, 'body' => $body, 'share' => $share, 'reply_to' => $data['reply_to'] ?? null]);
                 foreach (array_values($files) as $i => $file) {
                     $name = $file->getClientOriginalName();
                     $path = "{$channel->id}/{$message->id}/{$i}_".Attachments::safeFileName($name);
@@ -101,7 +108,7 @@ class MessageController extends Controller
                         'channel_id' => $channel->id,
                         'path' => $path,
                         'file_name' => mb_substr($name, 0, 255),
-                        'mime_type' => $file->getClientMimeType() ?: null,
+                        'mime_type' => Attachments::mimeOf($file),
                         'size_bytes' => $file->getSize(),
                     ]);
                 }
@@ -131,9 +138,9 @@ class MessageController extends Controller
         abort_unless(Access::canAccessChannel($user, $message->channel_id), 404);
         abort_unless($message->user_id === $user->id && Access::canPostInChannel($user, $message->channel), 403, 'You can only edit your own messages.');
 
-        $data = $request->validate(['body' => ['required', 'string', 'max:'.Message::MAX_BODY]]);
-        $body = trim($data['body']);
-        abort_if($body === '' && ! $message->attachments()->exists(), 422, 'A message cannot be empty.');
+        $data = $request->validate(['body' => ['present', 'nullable', 'string', 'max:'.Message::MAX_BODY]]);
+        $body = trim($data['body'] ?? '');
+        abort_if($body === '' && ! $message->share && ! $message->attachments()->exists(), 422, 'A message cannot be empty.');
 
         if ($body !== $message->body) {
             $mentioned = DB::transaction(function () use ($message, $body) {

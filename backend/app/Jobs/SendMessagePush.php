@@ -7,8 +7,10 @@ use App\Models\Message;
 use App\Models\PushSubscription;
 use App\Models\User;
 use App\Support\Fcm;
+use App\Support\Attachments;
 use App\Support\PushMessage;
 use App\Support\PushTargets;
+use App\Support\Share;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -36,7 +38,7 @@ class SendMessagePush implements ShouldQueue
             return; // push is not configured
         }
 
-        $message = Message::with('channel')->find($this->messageId);
+        $message = Message::with('channel', 'attachments')->find($this->messageId);
         if (! $message) {
             return; // deleted before we got here
         }
@@ -49,6 +51,7 @@ class SendMessagePush implements ShouldQueue
         $names = User::query()->pluck('display_name', 'id');
         $nameOf = fn (string $id) => $names[$id] ?? 'Unknown';
         $sender = $message->user_id ? $nameOf($message->user_id) : 'Someone';
+        $fallback = Share::summary($message->share) ?? Attachments::summary($message->attachments);
         $note = fn (string $userId, bool $preview) => PushMessage::build(
             $targets[$userId],
             $message->channel_id,
@@ -58,6 +61,7 @@ class SendMessagePush implements ShouldQueue
             $message->body,
             $preview,
             $nameOf,
+            $fallback,
         );
 
         if ($web) {

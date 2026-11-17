@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ApiAttachment, ApiMessage } from '~/types/api'
+import type { ApiAttachment, ApiMessage, ApiShare } from '~/types/api'
+import type { AttachAction } from '~/components/AttachMenu.vue'
 import type { ChannelEvent } from '~/stores/chat'
 import { displayMeta } from '~/utils/status'
 
@@ -37,7 +38,35 @@ async function toggleWatch() {
 }
 const files = ref<File[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
+const galleryInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
+
+// The "+" menu: files, photos/videos, camera, voice notes, locations and contacts.
+const camera = reactive({ open: false, mode: 'photo' as 'photo' | 'video' })
+const recordingVoice = ref(false)
+const locationOpen = ref(false)
+const contactOpen = ref(false)
+
+function onAttach(action: AttachAction) {
+  if (action === 'file') fileInput.value?.click()
+  else if (action === 'gallery') galleryInput.value?.click()
+  else if (action === 'camera' || action === 'video') Object.assign(camera, { open: true, mode: action === 'camera' ? 'photo' : 'video' })
+  else if (action === 'voice') recordingVoice.value = true
+  else if (action === 'location') locationOpen.value = true
+  else if (action === 'contact') contactOpen.value = true
+}
+
+// Previews of staged photos/videos in the composer.
+const stagedUrls = new Map<File, string>()
+function stagedUrl(f: File) {
+  let url = stagedUrls.get(f)
+  if (!url) stagedUrls.set(f, (url = URL.createObjectURL(f)))
+  return url
+}
+watch(files, (now) => {
+  for (const [f, url] of stagedUrls) if (!now.includes(f)) { URL.revokeObjectURL(url); stagedUrls.delete(f) }
+}, { deep: true })
+onBeforeUnmount(() => { for (const url of stagedUrls.values()) URL.revokeObjectURL(url) })
 const editingId = ref<string | null>(null)
 const editDraft = ref('')
 const editMap = ref<Record<string, string>>({}) // name -> user id for mentions already in the edited message
@@ -94,20 +123,22 @@ function sortMessages() {
 // Replying (like WhatsApp): the composer quotes one message, and replies show that quote above their text.
 const replyingTo = ref<Message | null>(null)
 const composer = ref<{ textareaRef?: HTMLTextAreaElement | null } | null>(null)
-type Quote = { user_id: string | null; body: string; hasFiles: boolean }
+type Quote = { user_id: string | null; body: string; hasFiles: boolean; summary?: string | null }
 
 /** The quoted message: the live copy when it is on screen (so edits show), else the preview the server sent. */
 const quoteOf = (m: Message): Quote | null => {
   if (!m.reply_to) return null
   const local = messages.value.find((x) => x.id === m.reply_to)
-  if (local) return { user_id: local.user_id, body: local.body, hasFiles: (local.message_attachments ?? []).some((a) => !a.deleted_at) }
+  if (local) return quoteFrom(local)
   const p = m.reply_preview
-  return p ? { user_id: p.user_id, body: p.body, hasFiles: p.has_files } : null
+  return p ? { user_id: p.user_id, body: p.body, hasFiles: p.has_files, summary: p.summary } : null
 }
+
+const quoteFrom = (m: Message): Quote => ({ user_id: m.user_id, body: m.body, hasFiles: (m.message_attachments ?? []).some((a) => !a.deleted_at), summary: messageSummary(m) })
 
 const quoteText = (q: Quote) => {
   const text = tokensToDisplay(q.body, (id) => chat.userName(id)).text.trim()
-  return text || (q.hasFiles ? 'Attachment' : '')
+  return text || q.summary || (q.hasFiles ? 'Attachment' : '')
 }
 
 function startReply(m: Message) {
@@ -251,6 +282,7 @@ watch(
     draft.value = saved.text
     mentionMap.value = { ...saved.map }
     files.value = []
+    recordingVoice.value = false
     editingId.value = null
     chat.setActive(id)
     loadMessages(id)
@@ -317,12 +349,15 @@ let pendingSeq = 0
  * Optimistic send: the composer clears and the message shows (dimmed) straight away;
  * the insert and any uploads run in the background and the row is swapped for the real one.
  */
-function send() {
-  const text = draft.value.trim()
-  const map = { ...mentionMap.value }
+function send(extra?: { share?: ApiShare; files?: File[] }) {
+  // A voice note, location or contact goes on its own; the typed text and staged files stay in the composer.
+  const standalone = !!extra
+  const text = standalone ? '' : draft.value.trim()
+  const map = standalone ? {} : { ...mentionMap.value }
   const body = displayToTokens(text, map)
-  const picked = [...files.value]
-  if (!body && !picked.length) return
+  const picked = standalone ? [...(extra.files ?? [])] : [...files.value]
+  const share = extra?.share ?? null
+  if (!body && !picked.length && !share) return
   const replyTo = replyingTo.value && !replyingTo.value.pending ? replyingTo.value : null
 
   const id = channelId.value
@@ -332,31 +367,43 @@ function send() {
     channel_id: id,
     user_id: chat.myId,
     body,
+    share,
     created_at: new Date().toISOString(),
     edited_at: null,
     reply_to: replyTo?.id ?? null,
     reply_preview: null,
-    message_attachments: [],
+    // shown while sending, so a location or voice note appears straight away
+    message_attachments: picked.map((f, i) => ({ id: `${tempId}-${i}`, message_id: tempId, channel_id: id, path: '', file_name: f.name, mime_type: f.type || null, size_bytes: f.size, deleted_at: null })),
     pending: true,
   })
-  draft.value = ''
   replyingTo.value = null
-  mentionMap.value = {}
-  closePicker()
-  files.value = []
+  if (!standalone) {
+    draft.value = ''
+    mentionMap.value = {}
+    closePicker()
+    files.value = []
+  }
   scrollToBottom()
 
-  sendQueue = sendQueue.then(() => deliver(id, tempId, body, picked, text, map, replyTo))
+  sendQueue = sendQueue.then(() => deliver(id, tempId, body, picked, text, map, replyTo, share))
 }
 
-async function deliver(id: string, tempId: string, body: string, picked: File[], text: string, map: Record<string, string>, replyTo: Message | null) {
+function sendVoiceNote(file: File) {
+  recordingVoice.value = false
+  send({ files: [file] })
+}
+
+const sendShare = (share: ApiShare) => send({ share })
+
+async function deliver(id: string, tempId: string, body: string, picked: File[], text: string, map: Record<string, string>, replyTo: Message | null, share: ApiShare | null = null) {
   const fail = (title: string, e: unknown) => {
     if (id !== channelId.value) {
       if (!drafts.get(id).text) drafts.set(id, text, map) // moved to another chat: keep the text as that chat's draft
     } else {
       messages.value = messages.value.filter((x) => x.id !== tempId)
       // Give the text and files back so the user can retry, unless they've started typing something else.
-      if (!draft.value && !files.value.length) {
+      // (A location or contact is just picked again.)
+      if (!share && !draft.value && !files.value.length) {
         draft.value = text
         mentionMap.value = map
         files.value = picked
@@ -371,11 +418,12 @@ async function deliver(id: string, tempId: string, body: string, picked: File[],
   form.append('body', body)
   if (replyTo) form.append('reply_to', replyTo.id)
   for (const file of picked) form.append('files[]', file, file.name)
+  if (share) for (const [k, v] of Object.entries(share)) if (v !== undefined && v !== null) form.append(`share[${k}]`, String(v))
   let data: Message
   try {
     data = await api<Message>(`/channels/${id}/messages`, { method: 'POST', body: form })
   } catch (e) {
-    return fail(picked.length ? 'Message and files not sent' : 'Message not sent', e)
+    return fail(share ? `${share.type === 'location' ? 'Location' : 'Contact'} not sent` : picked.length ? 'Message and files not sent' : 'Message not sent', e)
   }
 
   if (id !== channelId.value) return // user moved on; the channel reloads from the server
@@ -404,7 +452,7 @@ function cancelEdit() {
 }
 
 async function saveEdit(m: Message) {
-  const check = checkEdit(displayToTokens(editDraft.value, editMap.value), m.body, (m.message_attachments ?? []).some((a) => !a.deleted_at))
+  const check = checkEdit(displayToTokens(editDraft.value, editMap.value), m.body, !!m.share || (m.message_attachments ?? []).some((a) => !a.deleted_at))
   if (check.action === 'cancel') return cancelEdit()
   if (check.action === 'reject') {
     toast.add({ title: 'Message not changed', description: check.reason, color: 'warning' })
@@ -699,10 +747,15 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               </div>
               <MessageBody v-else-if="r.m.body" :body="r.m.body" />
               <span v-if="r.grouped && r.m.edited_at && editingId !== r.m.id" class="text-xs text-muted">(edited)</span>
+              <LocationCard v-if="r.m.share?.type === 'location'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" :sent-at="r.m.created_at" />
+              <ContactCard v-else-if="r.m.share?.type === 'contact'" :share="r.m.share" :sender="chat.userName(r.m.user_id)" />
               <MessageAttachments
                 v-if="r.m.message_attachments?.length"
                 :attachments="r.m.message_attachments"
-                :can-delete="canDeleteAttachment(r.m)"
+                :can-delete="!r.m.pending && canDeleteAttachment(r.m)"
+                :caption="r.m.body ? tokensToDisplay(r.m.body, (id) => chat.userName(id)).text : undefined"
+                :sender="chat.userName(r.m.user_id)"
+                :sent-at="r.m.created_at"
                 @delete="(a) => removeAttachment(r.m, a)"
               />
             </div>
@@ -718,7 +771,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
       <form
         v-else
         class="px-4 pb-4 pt-1"
-        @submit.prevent="send"
+        @submit.prevent="send()"
         @dragover.prevent="dragging = true"
         @dragleave.prevent="dragging = false"
         @drop.prevent="onDrop"
@@ -728,19 +781,32 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           <span class="w-1 shrink-0 bg-primary" />
           <div class="min-w-0 flex-1 py-1">
             <span class="block truncate text-xs font-semibold text-primary">Replying to {{ chat.userName(replyingTo.user_id) }}</span>
-            <span class="line-clamp-2 break-words text-toned">{{ quoteText({ user_id: replyingTo.user_id, body: replyingTo.body, hasFiles: (replyingTo.message_attachments ?? []).some((a) => !a.deleted_at) }) }}</span>
+            <span class="line-clamp-2 break-words text-toned">{{ quoteText(quoteFrom(replyingTo)) }}</span>
           </div>
           <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" class="self-start" aria-label="Cancel reply" @click="replyingTo = null" />
         </div>
-        <div v-if="files.length" class="mb-2 flex flex-wrap gap-2">
-          <UBadge v-for="(f, i) in files" :key="`${f.name}-${i}`" color="neutral" variant="subtle" class="gap-1">
-            {{ f.name }} <span class="text-muted">{{ formatBytes(f.size) }}</span>
-            <button type="button" class="ml-1" aria-label="Remove file" @click="files.splice(i, 1)">
-              <UIcon name="i-lucide-x" class="size-3" />
-            </button>
-          </UBadge>
+        <div v-if="files.length" class="mb-2 flex flex-wrap items-end gap-2">
+          <template v-for="(f, i) in files" :key="`${f.name}-${i}`">
+            <div v-if="isInlineImage(f.type) || isInlineVideo(f.type)" class="relative size-16 overflow-hidden rounded-lg border border-default bg-black">
+              <img v-if="isInlineImage(f.type)" :src="stagedUrl(f)" :alt="f.name" class="size-full object-cover" />
+              <template v-else>
+                <video :src="stagedUrl(f)" muted playsinline preload="metadata" class="size-full object-cover" />
+                <UIcon name="i-lucide-video" class="absolute bottom-1 left-1 size-3.5 text-white drop-shadow" />
+              </template>
+              <button type="button" class="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-black/70 text-white" :aria-label="`Remove ${f.name}`" @click="files.splice(i, 1)">
+                <UIcon name="i-lucide-x" class="size-3" />
+              </button>
+            </div>
+            <UBadge v-else color="neutral" variant="subtle" class="gap-1">
+              {{ f.name }} <span class="text-muted">{{ formatBytes(f.size) }}</span>
+              <button type="button" class="ml-1" aria-label="Remove file" @click="files.splice(i, 1)">
+                <UIcon name="i-lucide-x" class="size-3" />
+              </button>
+            </UBadge>
+          </template>
         </div>
-        <div class="relative flex items-end gap-2">
+        <VoiceRecorder v-if="recordingVoice" @send="sendVoiceNote" @cancel="recordingVoice = false" />
+        <div v-else class="relative flex items-end gap-2">
           <ul
             v-if="candidates.length"
             class="absolute bottom-full left-12 z-10 mb-1 w-64 overflow-hidden rounded-md border border-default bg-default shadow-lg"
@@ -762,7 +828,8 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             </li>
           </ul>
           <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
-          <UButton icon="i-lucide-paperclip" color="neutral" variant="ghost" aria-label="Attach files" @click="fileInput?.click()" />
+          <input ref="galleryInput" type="file" multiple accept="image/*,video/*" class="hidden" @change="onPickFiles" />
+          <AttachMenu @pick="onAttach" />
           <UTextarea
             ref="composer"
             v-model="draft"
@@ -781,10 +848,14 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             @blur="closePicker"
             @paste="onPaste"
           />
-          <UButton type="submit" icon="i-lucide-send-horizontal" :disabled="!draft.trim() && !files.length" aria-label="Send message" />
+          <UButton v-if="draft.trim() || files.length" type="submit" icon="i-lucide-send-horizontal" aria-label="Send message" />
+          <UButton v-else icon="i-lucide-mic" color="neutral" variant="ghost" aria-label="Record a voice note" title="Record a voice note" @click="recordingVoice = true" />
         </div>
         </div>
       </form>
+      <CameraCapture v-model:open="camera.open" :mode="camera.mode" @capture="(f) => addFiles([f])" />
+      <LocationPicker v-model:open="locationOpen" @share="sendShare" />
+      <ContactPicker v-model:open="contactOpen" @share="sendShare" />
     </template>
   </div>
 </template>

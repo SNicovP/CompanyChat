@@ -17,7 +17,7 @@ class ReplyTest extends TestCase
             ->assertCreated()->assertJsonPath('reply_to', $original->id);
         $listed = collect($this->actingAs($member)->getJson("/api/channels/{$public->id}/messages")->json())->firstWhere('body', 'hi back');
         $this->assertSame($original->id, $listed['reply_to']);
-        $this->assertSame(['user_id' => $admin->id, 'body' => 'hello', 'has_files' => false], $listed['reply_preview']);
+        $this->assertSame(['user_id' => $admin->id, 'body' => 'hello', 'has_files' => false, 'summary' => null], $listed['reply_preview']);
     }
 
     public function test_a_reply_cannot_quote_another_channel(): void
