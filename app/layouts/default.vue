@@ -192,6 +192,7 @@ const items = computed(() => [
       </span>
     </div>
     <NotificationSoundsModal v-model:open="soundsOpen" />
+    <ClientOnly><CallOverlay /></ClientOnly>
     <div class="flex min-h-0 flex-1">
       <div v-if="menuOpen" class="fixed inset-0 z-30 bg-black/60 md:hidden" @click="menuOpen = false" />
       <div

@@ -36,9 +36,10 @@ class Fcm
 
     /**
      * @param  array{title: string, body: string, tag: string, url: string}  $note
+     * @param  ?int  $ttl  seconds FCM keeps trying to deliver it (default: FCM's four weeks)
      * @return 'ok'|'invalid'|'error'  invalid = the token is dead and should be forgotten
      */
-    public static function send(string $token, array $note): string
+    public static function send(string $token, array $note, ?int $ttl = null): string
     {
         $credentials = self::credentials();
         if (! $credentials) {
@@ -51,10 +52,11 @@ class Fcm
                     'token' => $token,
                     'notification' => ['title' => $note['title'], 'body' => $note['body']],
                     'data' => ['url' => $note['url']],
-                    'android' => [
+                    'android' => array_filter([
                         'priority' => 'HIGH',
+                        'ttl' => $ttl ? "{$ttl}s" : null,
                         'notification' => ['tag' => $note['tag'], 'channel_id' => 'messages'],
-                    ],
+                    ]),
                 ],
             ]);
 

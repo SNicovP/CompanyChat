@@ -62,8 +62,34 @@ export interface ApiContactShare {
   user_id?: string
 }
 
-/** A location or contact card on a message (voice notes, photos and videos are attachments). */
-export type ApiShare = ApiLocationShare | ApiContactShare
+export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'rejected' | 'cancelled' | 'failed'
+export type FinalCallStatus = Exclude<CallStatus, 'ringing' | 'active'>
+
+/** Call history, written by the server when a call in a DM ends (the message's author is the caller). */
+export interface ApiCallShare {
+  type: 'call'
+  status: FinalCallStatus
+  /** seconds connected, for answered calls */
+  duration?: number
+}
+
+/** A location or contact card on a message (voice notes, photos and videos are attachments), or a call-history entry. */
+export type ApiShare = ApiLocationShare | ApiContactShare | ApiCallShare
+
+/** A 1:1 voice call in a DM. */
+export interface ApiCall {
+  id: string
+  channel_id: string
+  caller_id: string
+  callee_id: string
+  status: CallStatus
+  end_reason: string | null
+  created_at: string
+  answered_at: string | null
+  ended_at: string | null
+  /** STUN (and later TURN) servers; only in responses to the two people on the call */
+  ice_servers?: RTCIceServer[]
+}
 
 export interface ApiMessage {
   id: string

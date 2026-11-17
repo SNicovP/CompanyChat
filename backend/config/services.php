@@ -35,6 +35,19 @@ return [
         'subject' => env('VAPID_SUBJECT'), // mailto:you@yourcompany.com
     ],
 
+    // Voice calls (WebRTC). STUN lets two devices behind ordinary NAT find each other; calls between networks that
+    // block direct connections (carrier NAT, strict firewalls) are relayed by coturn.
+    'webrtc' => [
+        'stun_urls' => array_values(array_filter(array_map('trim', explode(',', (string) env('WEBRTC_STUN_URLS', 'stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478'))))),
+    ],
+
+    // coturn with use-auth-secret: the API turns the shared secret into short-lived credentials per user (see App\Support\Calls).
+    'coturn' => [
+        'urls' => array_values(array_filter(array_map('trim', explode(',', (string) env('COTURN_URLS', ''))))),
+        'secret' => env('COTURN_SECRET'),
+        'ttl' => (int) env('COTURN_TTL', 86400),
+    ],
+
     // Firebase Cloud Messaging for the Android app: path to the service-account JSON (Firebase console > Service accounts).
     'fcm' => [
         'credentials' => env('FCM_CREDENTIALS'),

@@ -85,7 +85,26 @@ export function toneCategory(m: { kind: 'dm' | 'project'; mentionsMe: boolean })
 
 /** Play a tone. `volume` is 0..1. Silently does nothing if the browser blocks audio. */
 export function playTone(id: ToneId, volume = 1) {
-  const notes = TONES[id]?.notes ?? []
+  playNotes(TONES[id]?.notes ?? [], volume)
+}
+
+/** An incoming call: a two-burst phone ring, repeated by the caller of playNotes every RING_REPEAT_MS. */
+export const RINGTONE: Note[] = [
+  { freq: 440, at: 0, dur: 0.4, gain: 0.1 },
+  { freq: 480, at: 0, dur: 0.4, gain: 0.1 },
+  { freq: 440, at: 0.6, dur: 0.4, gain: 0.1 },
+  { freq: 480, at: 0.6, dur: 0.4, gain: 0.1 },
+]
+
+/** What the caller hears while it rings at the other end. */
+export const RINGBACK: Note[] = [
+  { freq: 425, at: 0, dur: 1, gain: 0.05 },
+]
+
+export const RING_REPEAT_MS = 3000
+
+/** Play a list of notes. `volume` is 0..1. Silently does nothing if the browser blocks audio. */
+export function playNotes(notes: Note[], volume = 1) {
   if (!notes.length || volume <= 0) return
   try {
     const ctx = new AudioContext()

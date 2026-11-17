@@ -63,14 +63,23 @@ export function validateFile(file: { name: string; size: number; type?: string }
 
 /** One line for a message that has no text: "🎤 Voice note", "📷 Photo +2", "📍 Client office"... (matches the API). */
 export function messageSummary(m: {
-  share?: { type: 'location'; label?: string } | { type: 'contact'; name: string } | null
+  share?: { type: 'location'; label?: string } | { type: 'contact'; name: string } | { type: 'call'; status: string } | null
   message_attachments?: { mime_type: string | null; file_name: string; deleted_at: string | null }[]
 }): string | null {
   if (m.share?.type === 'location') return `📍 ${m.share.label || 'Location'}`
   if (m.share?.type === 'contact') return `👤 ${m.share.name || 'Contact'}`
+  if (m.share?.type === 'call') return callSummary(m.share.status)
   const live = (m.message_attachments ?? []).filter((a) => !a.deleted_at)
   if (!live.length) return null
   const first = live[0]!
   const label = { voice: '🎤 Voice note', audio: '🎵 Audio', video: '🎥 Video', image: '📷 Photo', file: `📎 ${first.file_name}` }[attachmentKind(first)]
   return live.length > 1 ? `${label} +${live.length - 1}` : label
+}
+
+/** "📞 Missed call" etc. for a call-history entry (matches the API's Share::summary). */
+export function callSummary(status: string): string {
+  if (status === 'ended') return '📞 Voice call'
+  if (status === 'missed' || status === 'cancelled') return '📞 Missed call'
+  if (status === 'rejected') return '📞 Declined call'
+  return '📞 Call failed'
 }
