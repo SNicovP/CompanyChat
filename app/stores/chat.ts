@@ -179,13 +179,15 @@ export const useChatStore = defineStore('chat', () => {
     if (mentions.value[channelId]) mentions.value = { ...mentions.value, [channelId]: 0 }
   }
 
-  async function markRead(channelId: string) {
+  async function markRead(channelId: string, retry = true) {
     clearLocal(channelId)
     readsInFlight.set(channelId, (readsInFlight.get(channelId) ?? 0) + 1)
     try {
       await api(`/channels/${channelId}/read`, { method: 'POST' })
     } catch {
-      // the next reconcile shows the server's view again
+      // A flaky connection (a phone that just woke up) must not leave the chat unread on the server: try once more.
+      // If that fails too, the next reconcile shows the server's view again.
+      if (retry) setTimeout(() => { if (activeChannelId.value === channelId && reading()) void markRead(channelId, false) }, 2000)
     } finally {
       const left = (readsInFlight.get(channelId) ?? 1) - 1
       if (left > 0) readsInFlight.set(channelId, left)
@@ -300,6 +302,14 @@ export const useChatStore = defineStore('chat', () => {
 
   /** The open chat just came on screen: what arrived meanwhile is now read. */
   const markActiveRead = () => { if (activeChannelId.value && reading()) markRead(activeChannelId.value) }
+
+  /**
+   * Stamp a chat as read once its messages are on screen: after it opened, or after a refetch following a gap. The
+   * marker set when the chat was opened can predate a message that arrived while loading; this one cannot.
+   */
+  function markReadIfReading(channelId: string) {
+    if (activeChannelId.value === channelId && reading()) void markRead(channelId)
+  }
   const onFocus = () => markActiveRead()
 
   /**
@@ -528,5 +538,5 @@ export const useChatStore = defineStore('chat', () => {
     loaded.value = false
   }
 
-  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, typing, sendTyping, createClient, createProject, setProjectArchived, setClientArchived, archivedClients, archivedProjects, startDm, reset, onChannelEvent }
+  return { clients, channels, directory, onlineIds, activePeople, displayStatus, start, stop, watchedChannelIds, setWatching, unread, mentions, totalUnread, totalMentions, activeChannelId, setActive, markRead, markReadIfReading, canManageClient, canManageChannel, loaded, myId, projectsByClient, dms, otherUser, channelTitle, userName, load, typing, sendTyping, createClient, createProject, setProjectArchived, setClientArchived, archivedClients, archivedProjects, startDm, reset, onChannelEvent }
 })

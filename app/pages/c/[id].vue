@@ -142,6 +142,7 @@ async function loadMessages(id: string) {
   const target = typeof route.query.m === 'string' ? route.query.m : null
   if (target) await jumpTo(target)
   else await scrollToBottom()
+  chat.markReadIfReading(id) // a message may have arrived after the marker set when the chat was opened
 }
 
 // Opened from search (?m=<message id>): show that message, scroll to it and flash it.
@@ -199,6 +200,7 @@ async function resync(full: boolean) {
   }
   messages.value = kept
   sortMessages()
+  chat.markReadIfReading(id) // we were away: what we just fetched is on screen now, so tell the sender
   if (added) scrollToBottom()
 }
 
@@ -208,7 +210,7 @@ function onChannelEvent(e: ChannelEvent) {
     return
   }
   if (e.type === 'read') {
-    if (e.channel_id === channelId.value && e.user_id !== chat.myId) readAt.value = { ...readAt.value, [e.user_id]: e.read_at }
+    if (e.channel_id === channelId.value && e.user_id !== chat.myId) readAt.value = { ...readAt.value, [e.user_id]: laterOf(readAt.value[e.user_id], e.read_at) }
     return
   }
   if (e.type === 'deleted') {
