@@ -1,29 +1,34 @@
 <script setup lang="ts">
 import { namesSummary } from '~/utils/mesh'
+import { playStream } from '~/utils/audio-unlock'
 import { formatCallDuration } from '~/utils/peer'
 
 // The floating panel of a group call or announcement we are in, and the audio of everyone we hear.
 const rooms = useRoomsStore()
 const chat = useChatStore()
 
-// one <audio> per person; a listener who has not touched the page yet may need to tap before the browser plays sound
+// Everyone we hear. A listener who has not touched the page since it loaded can't be played to yet (browser rule):
+// the first click or key press anywhere starts it (utils/audio-unlock.ts); until then show a button.
 const blocked = ref(false)
-const players = new Map<string, HTMLAudioElement>()
-function bind(id: string, el: unknown) {
-  if (!(el instanceof HTMLAudioElement)) {
-    players.delete(id)
-    return
+const players = new Map<string, () => void>()
+watch(() => rooms.remote, (streams) => {
+  for (const [id, stop] of players) {
+    if (!streams[id]) {
+      stop()
+      players.delete(id)
+    }
   }
-  players.set(id, el)
-  const stream = rooms.remote[id] ?? null
-  if (el.srcObject !== stream) {
-    el.srcObject = stream
-    if (stream) el.play().then(() => { blocked.value = false }).catch(() => { blocked.value = true })
+  for (const [id, stream] of Object.entries(streams)) {
+    if (players.has(id)) continue
+    players.set(id, playStream(stream, { onBlocked: () => { blocked.value = true }, onPlaying: () => { blocked.value = false } }))
   }
-}
+}, { immediate: true })
+onBeforeUnmount(() => {
+  for (const stop of players.values()) stop()
+  players.clear()
+})
 function playAll() {
-  blocked.value = false
-  for (const el of players.values()) void el.play().catch(() => { blocked.value = true })
+  // the click itself unlocks audio (the listener in utils/audio-unlock.ts runs first and plays what was waiting)
 }
 watch(() => rooms.phase, (p) => { if (p === 'idle') blocked.value = false })
 
@@ -65,8 +70,6 @@ const leaveLabel = computed(() => {
 </script>
 
 <template>
-  <audio v-for="(_, id) in rooms.remote" :key="id" :ref="(el) => bind(String(id), el)" autoplay playsinline class="hidden" />
-
   <Transition
     enter-active-class="transition duration-200"
     enter-from-class="translate-y-4 opacity-0"
@@ -115,7 +118,7 @@ const leaveLabel = computed(() => {
       <p v-if="unreachable.length && rooms.role !== 'listener'" class="mt-2 text-xs text-error">
         Can't reach {{ namesSummary(unreachable) }}: their network may block direct calls.
       </p>
-      <UButton v-if="blocked" block class="mt-2" icon="i-lucide-volume-2" @click="playAll">Tap to listen</UButton>
+      <UButton v-if="blocked" block class="mt-2" icon="i-lucide-volume-2" @click="playAll">Your browser needs one click to play sound: click here</UButton>
     </div>
   </Transition>
 </template>

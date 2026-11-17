@@ -3,6 +3,7 @@ import type { ApiRoom, RoomRole } from '~/types/api'
 import { linkTo, type Member, type RoomSignal } from '~/utils/mesh'
 import { CALL_AUDIO, CallPeer, NETWORK_HINT, type Signal } from '~/utils/peer'
 import { mediaErrorMessage, requestMedia } from '~/utils/recording'
+import { audioAllowed } from '~/utils/audio-unlock'
 import { TONES, playNotes } from '~/utils/tones'
 
 /**
@@ -44,6 +45,7 @@ export const useRoomsStore = defineStore('rooms', () => {
   const api = useApi()
   const auth = useAuth()
   const config = useRuntimeConfig()
+  const notifier = useNotifier()
 
   /** live rooms this person can see, by id */
   const live = ref<Record<string, ApiRoom>>({})
@@ -220,6 +222,18 @@ export const useRoomsStore = defineStore('rooms', () => {
     joinPresence(room)
     heartbeat = setInterval(() => void ping(), HEARTBEAT_MS)
     if (as === 'listener') {
+      // The page hasn't been touched since it loaded (or is in the background): browsers won't play sound yet.
+      // A system notification gets attention; clicking it brings the app forward, and any click there plays it.
+      if (!audioAllowed() || document.visibilityState !== 'visible') {
+        void notifier.show({
+          channelId: `room-${room.id}`,
+          title: `📢 ${chat.userName(room.started_by)}`,
+          body: room.target_user_id ? 'On the intercom' : `Announcing to ${audienceName(room)}`,
+          url: location.pathname + location.search,
+          forcePreview: true,
+          category: 'mention',
+        })
+      }
       toast.add({
         title: room.target_user_id ? `${chat.userName(room.started_by)} is on the intercom` : `${chat.userName(room.started_by)} is announcing to ${audienceName(room)}`,
         icon: 'i-lucide-megaphone',

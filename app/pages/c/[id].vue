@@ -664,6 +664,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
           <UserMenu :user-id="chat.otherUser(channel)?.id">
             <UserAvatar :name="chat.channelTitle(channel)" :status="chat.displayStatus(chat.otherUser(channel)?.id)" size="sm" ring="default" />
           </UserMenu>
+          <UserMenu :user-id="chat.otherUser(channel)?.id">
           <div class="min-w-0">
             <span class="block truncate text-base font-semibold leading-tight text-highlighted">{{ chat.channelTitle(channel) }}</span>
             <!-- like WhatsApp: "typing…" replaces their status while they type -->
@@ -671,6 +672,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               {{ typingText ? 'typing…' : displayMeta(chat.displayStatus(chat.otherUser(channel)?.id)).label }}
             </span>
           </div>
+          </UserMenu>
         </template>
         <template v-else-if="channel">
           <UIcon :name="channel.is_private ? 'i-lucide-lock' : 'i-lucide-hash'" class="size-5 shrink-0 text-muted" />
