@@ -98,7 +98,7 @@ Hover your own message and click the pencil, or press Up in an empty composer to
 
 ## Desktop notifications
 - Browser notifications (plus an optional short sound) while the window is in the background. Direct messages and @mentions always notify; other project messages only for channels you "watch" (bell button in the channel header). Nothing is sent for your own messages, while the window is focused, or while your status is Do not disturb.
-- A banner offers to turn them on; afterwards the name menu has Desktop notifications / Message previews toggles and **Sound settings** (a tone per kind of message: DMs, @mentions, channel messages, saved to the account; sound on/off and volume per device). The toggles are per browser (localStorage); watched channels are per user (`channel_watches`).
+- A banner offers to turn them on; afterwards the name menu has Desktop notifications / Message previews toggles and **Sound settings**: a tone per kind of message (DMs, @mentions, channel messages) and a ringtone for incoming calls, saved to the account; message-sound on/off and volume per device. People can upload their own sounds (MP3/WAV/OGG/M4A, up to 1 MB and 30 seconds, 10 each; `custom_sounds`, files under `sounds/{user}/` on the attachments disk, private to their owner) and pick them for any of these. The toggles are per browser (localStorage); watched channels are per user (`channel_watches`).
 - Works only while the app is open in a tab or window. Notifications with the app closed need push, which comes with the desktop/mobile wrapper.
 
 ## Deploying (Laravel Forge)

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import type { ApiUser, AppRole } from '~/types/api'
 import type { UserStatus } from '~/utils/status'
-import { reconcileTones, type ToneCategory, type ToneId } from '~/utils/tones'
+import { reconcileTones, type Tones } from '~/utils/tones'
 
 export interface Profile {
   id: string
@@ -17,6 +17,7 @@ export const useProfileStore = defineStore('profile', () => {
   const auth = useAuth()
   const profile = ref<Profile | null>(null)
   const notifier = useNotifier()
+  const customSounds = useCustomSounds()
 
   const isSuperAdmin = computed(() => profile.value?.app_role === 'super_admin')
   const isAdmin = computed(() => profile.value?.app_role === 'super_admin' || profile.value?.app_role === 'admin')
@@ -32,6 +33,7 @@ export const useProfileStore = defineStore('profile', () => {
     auth.user.value = me
     profile.value = { ...me, email: me.email ?? '' }
     adoptTones(me)
+    customSounds.load(me.id).catch(() => {}) // uploaded tones: until they arrive, the defaults play
   }
 
   // --- notification tones: saved to the account so they survive clearing site data and follow you to other devices
@@ -51,7 +53,7 @@ export const useProfileStore = defineStore('profile', () => {
   let saving: Promise<unknown> = Promise.resolve()
 
   /** Save tones to the account (null = back to the defaults). This device already uses them. */
-  function saveTones(tones: Record<ToneCategory, ToneId> | null): Promise<void> {
+  function saveTones(tones: Tones | null): Promise<void> {
     const run = saving.catch(() => {}).then(() => api('/me', { method: 'PATCH', body: { notification_tones: tones } }))
     saving = run
     return run.then(() => {})
