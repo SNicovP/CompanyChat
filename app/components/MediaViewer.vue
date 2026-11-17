@@ -28,7 +28,15 @@ function onKey(e: KeyboardEvent) {
   if (e.key === 'ArrowRight') go(1)
   else if (e.key === 'ArrowLeft') go(-1)
 }
-onMounted(() => window.addEventListener('keydown', onKey))
+// The viewer covers the whole window. In an installed desktop app on a Mac (PWA or Electron) the red/yellow/green window
+// buttons are drawn over the top-left corner of the page, so the header leaves room for them.
+const windowButtonsInset = ref(false)
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  const standalone = ['standalone', 'window-controls-overlay', 'minimal-ui'].some((m) => window.matchMedia(`(display-mode: ${m})`).matches)
+  const mac = /Mac/.test(navigator.platform) && !window.matchMedia('(pointer: coarse)').matches
+  windowButtonsInset.value = (standalone && mac) || document.documentElement.classList.contains('desktop-mac')
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 // Swipe left/right on touch screens.
@@ -65,7 +73,7 @@ async function download() {
   <UModal v-model:open="open" fullscreen :ui="{ content: 'bg-black text-white' }" :title="item?.file_name ?? 'Media'" :description="sender">
     <template #content>
       <div class="flex h-full flex-col" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
-        <div class="flex items-center gap-2 px-3 py-2">
+        <div class="flex items-center gap-2 py-2 pr-3" :class="windowButtonsInset ? 'pl-22' : 'pl-3'">
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold">{{ sender ?? item?.file_name }}</p>
             <p class="truncate text-xs text-white/60">
