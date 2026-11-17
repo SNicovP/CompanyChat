@@ -210,8 +210,9 @@ function createMenu() {
 }
 
 app.whenReady().then(() => {
-  // Notifications and clipboard only; deny everything else the page might ask for.
-  const allowed = new Set(['notifications', 'clipboard-sanitized-write', 'fullscreen'])
+  // Notifications, clipboard, camera/microphone (photos, videos, voice notes) and location (sharing it in a chat);
+  // deny everything else the page might ask for.
+  const allowed = new Set(['notifications', 'clipboard-sanitized-write', 'fullscreen', 'media', 'geolocation'])
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.has(permission)))
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed.has(permission))
 

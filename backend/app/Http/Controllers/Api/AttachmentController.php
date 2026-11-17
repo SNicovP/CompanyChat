@@ -10,7 +10,7 @@ use App\Support\Attachments;
 use App\Support\Realtime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class AttachmentController extends Controller
 {
@@ -41,8 +41,11 @@ class AttachmentController extends Controller
         return response()->json(['urls' => $urls, 'expires_in' => Attachments::URL_TTL_SECONDS]);
     }
 
-    /** Serves the file behind a signed URL (no bearer token needed, so <img src> works). */
-    public function file(Request $request, MessageAttachment $attachment): StreamedResponse
+    /**
+     * Serves the file behind a signed URL (no bearer token needed, so <img src> and <video src> work).
+     * Files on a local disk support Range requests, which audio/video players need to seek (and Safari to play).
+     */
+    public function file(Request $request, MessageAttachment $attachment): Response
     {
         abort_if($attachment->deleted_at !== null, 404);
         $disk = Attachments::disk();
@@ -53,8 +56,15 @@ class AttachmentController extends Controller
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, max-age=3600',
         ];
-        // Only known-safe images are ever shown inline; everything else is forced to download.
-        $inline = ! $request->boolean('download') && Attachments::isInlineImage($attachment->mime_type);
+        // Only known-safe images, audio and video are ever shown inline; everything else is forced to download.
+        $inline = ! $request->boolean('download') && Attachments::isInline($attachment->mime_type);
+
+        if (config('filesystems.disks.'.config('filesystems.attachments_disk').'.driver') === 'local') {
+            $response = response()->file($disk->path($attachment->path), $headers);
+            $response->setContentDisposition($inline ? 'inline' : 'attachment', $attachment->file_name, Attachments::safeFileName($attachment->file_name));
+
+            return $response;
+        }
 
         return $inline
             ? $disk->response($attachment->path, $attachment->file_name, $headers)

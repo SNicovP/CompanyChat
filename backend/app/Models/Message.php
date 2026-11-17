@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?string $user_id
  * @property ?string $reply_to
  * @property string $body
+ * @property ?array $share
  */
 class Message extends Model
 {
@@ -21,7 +22,7 @@ class Message extends Model
 
     public const MAX_BODY = 4000;
 
-    protected $fillable = ['channel_id', 'user_id', 'body', 'reply_to'];
+    protected $fillable = ['channel_id', 'user_id', 'body', 'share', 'reply_to'];
 
     protected $hidden = ['body_tsv', 'updated_at'];
 
@@ -32,6 +33,7 @@ class Message extends Model
         return [
             'created_at' => 'datetime',
             'edited_at' => 'datetime',
+            'share' => 'array',
         ];
     }
 

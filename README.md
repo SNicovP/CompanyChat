@@ -42,6 +42,11 @@ Requires Node ^22.21 || ^24.11 || >=26 (Nuxt 4) and PHP 8.3+ for the backend.
   (`channel_reads`, `GET /api/channels/{id}/reads`, live via the `channel.read` event). In a project it means at least one other person.
 - "X is typing…" uses Reverb client events (whispers, nothing stored) and expires 3 seconds after the last signal. Every chat shows a bubble with moving (green) dots after the last message, preceded by initials avatars (up to three, then "+N"), so no profile pictures are needed. A DM also shows a green "typing…" in its header instead of the contact's status.
 - Unsent text is kept per chat on this device (localStorage), so switching chats or reloading never loses a draft.
+- The composer's "+" menu sends documents, photos & videos, camera photos/videos, voice notes (also the mic button when
+  the box is empty), a location and a contact card. Photos, videos and voice notes are ordinary attachments (videos and
+  audio up to 50 MB, other files 10 MB) and play inline; locations and contacts are stored on the message (`share`).
+  Map previews use OpenStreetMap tiles (no key). Camera, microphone and location need permission: the Android manifest
+  and the desktop app (Electron permissions + macOS usage strings) ask for them.
 
 ## Resetting for go-live
 Wipe test content but keep the schema and users (MySQL):
