@@ -672,7 +672,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             </div>
           </div>
         </template>
-        <TypingBubble v-if="channel?.kind !== 'dm' && typingNames.length" :names="typingNames" />
+        <TypingBubble v-if="typingNames.length" :names="typingNames" />
       </div>
 
       <div v-if="readOnly" class="mx-4 mb-4 mt-1 flex items-center gap-2 rounded-xl border border-accented bg-muted/60 px-4 py-3 text-sm text-muted">

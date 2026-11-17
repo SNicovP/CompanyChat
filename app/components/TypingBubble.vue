@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// "Typing…" for project chats, like WhatsApp: the people typing (initials avatars, so no profile pictures are needed)
+// "Typing…" in every chat (DMs also show it in the header), like WhatsApp: the people typing (initials avatars, so no profile pictures are needed)
 // next to a bubble with three moving dots. More than MAX_SHOWN people collapse into a "+N".
 const props = defineProps<{ names: string[] }>()
 
@@ -22,7 +22,7 @@ const label = computed(() => {
       <span v-if="extra" class="relative inline-flex size-6 items-center justify-center rounded-full bg-accented text-[10px] font-semibold text-toned ring-2 ring-[var(--ui-bg)]">+{{ extra }}</span>
     </span>
     <span class="inline-flex items-center gap-1 rounded-2xl bg-elevated px-3 py-2.5" aria-hidden="true">
-      <span v-for="i in 3" :key="i" class="typing-dot size-1.5 rounded-full bg-neutral-400" :style="{ animationDelay: `${(i - 1) * 0.2}s` }" />
+      <span v-for="i in 3" :key="i" class="typing-dot size-1.5 rounded-full bg-primary" :style="{ animationDelay: `${(i - 1) * 0.2}s` }" />
     </span>
   </div>
 </template>
