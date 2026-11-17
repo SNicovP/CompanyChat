@@ -20,6 +20,10 @@ export function useEcho(): Echo<'reverb'> {
     wssPort: port,
     forceTLS: secure,
     enabledTransports: ['ws', 'wss'],
+    // Notice a socket that died without closing (sleep, Wi-Fi change, proxy idle timeout) within ~30s instead
+    // of the default ~60s: ping after 20s of silence, give up on it if no pong comes within 8s.
+    activityTimeout: 20_000,
+    pongTimeout: 8_000,
     // Private and presence channels are authorised by the API with our bearer token.
     authorizer: (channel: { name: string }) => ({
       authorize: (socketId: string, callback: (error: Error | null, data: { auth: string; channel_data?: string } | null) => void) => {
@@ -59,6 +63,18 @@ export function onEchoConnected(fn: () => void): () => void {
   const connection = (useEcho().connector as unknown as { pusher: Pusher }).pusher.connection
   connection.bind('connected', fn)
   return () => connection.unbind('connected', fn)
+}
+
+/**
+ * Drop and reopen the socket (channels are re-joined automatically and onEchoConnected fires). Used after the
+ * page was in the background for a while, where a dead socket can go unnoticed. False when not connected yet.
+ */
+export function reconnectEcho(): boolean {
+  const pusher = (echo?.connector as unknown as { pusher: Pusher } | undefined)?.pusher
+  if (!pusher) return false
+  pusher.disconnect()
+  pusher.connect()
+  return true
 }
 
 export function disconnectEcho() {

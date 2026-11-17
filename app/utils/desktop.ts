@@ -5,6 +5,8 @@ export interface DesktopBridge {
   setLaunchAtLogin?: (on: boolean) => Promise<boolean>
   showWindow?: () => void
   onResume?: (cb: () => void) => () => void
+  /** Window shown (true) or hidden in the tray / minimised (false); called once straight away with the current state. */
+  onVisibility?: (cb: (shown: boolean) => void) => () => void
 }
 
 export function desktopBridge(): DesktopBridge | undefined {

@@ -172,7 +172,41 @@ async function jumpTo(messageId: string) {
 // Live events come from the chat store, which follows every channel we can open over Reverb.
 let stopEvents: (() => void) | null = null
 
+/**
+ * Live events may have been missed (reconnect, back from the background): reload the read markers and, if `full`,
+ * the latest page of messages, merged in so the scroll position, older pages and messages being sent are kept.
+ */
+async function resync(full: boolean) {
+  const id = channelId.value
+  if (loading.value) return // a full load is already under way
+  loadReads(id)
+  if (!full) return
+  const data = await api<Message[]>(`/channels/${id}/messages`, { query: { limit: PAGE_SIZE } }).catch(() => null)
+  if (!data || id !== channelId.value || loading.value) return
+  const fresh = new Map(data.map((m) => [m.id, m]))
+  // Everything from the oldest fetched message onwards should be in `data`; a missing one was deleted.
+  const from = data.length >= PAGE_SIZE ? data[0]!.created_at : ''
+  const sending = messages.value.some((m) => m.pending) // our own sends are swapped in by deliver()
+  const known = new Set(messages.value.map((m) => m.id))
+  let added = false
+  const kept = messages.value
+    .filter((m) => m.pending || m.created_at < from || fresh.has(m.id))
+    .map((m) => fresh.get(m.id) ?? m)
+  for (const m of data) {
+    if (known.has(m.id) || (sending && m.user_id === chat.myId)) continue
+    kept.push(m)
+    added = true
+  }
+  messages.value = kept
+  sortMessages()
+  if (added) scrollToBottom()
+}
+
 function onChannelEvent(e: ChannelEvent) {
+  if (e.type === 'resync') {
+    void resync(e.full)
+    return
+  }
   if (e.type === 'read') {
     if (e.channel_id === channelId.value && e.user_id !== chat.myId) readAt.value = { ...readAt.value, [e.user_id]: e.read_at }
     return
