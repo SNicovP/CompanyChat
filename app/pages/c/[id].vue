@@ -21,6 +21,7 @@ const clientName = computed(() => chat.clients.find((c) => c.id === channel.valu
 
 const messages = ref<Message[]>([])
 const draft = ref('')
+const drafts = useDrafts() // unsent text per chat, so switching chats keeps what you typed
 const loading = ref(true)
 const scroller = ref<HTMLElement | null>(null)
 const membersOpen = ref(false)
@@ -51,6 +52,27 @@ const candidates = computed(() => {
   const people = filterPeople(chat.activePeople.filter((u) => u.id !== chat.myId), picker.query)
   const offerEveryone = channel.value?.kind !== 'dm' && CHANNEL_MENTION.startsWith(picker.query.toLowerCase())
   return offerEveryone ? [everyoneOption, ...people].slice(0, 6) : people
+})
+
+// "Seen" ticks on your own messages: one tick = saved on the server, two = someone else has opened the chat since.
+const readAt = ref<Record<string, string>>({}) // other person's user id -> how far they have read (ISO time)
+const lastRead = computed(() => Object.values(readAt.value).reduce((max, t) => (t > max ? t : max), ''))
+const isSeen = (m: Message) => !m.pending && !!lastRead.value && m.created_at <= lastRead.value
+
+async function loadReads(id: string) {
+  const data = await api<{ user_id: string; read_at: string }[]>(`/channels/${id}/reads`).catch(() => null)
+  if (!data || id !== channelId.value) return
+  readAt.value = Object.fromEntries(data.map((r) => [r.user_id, r.read_at]))
+}
+
+// "Someone is typing…"
+const typingNames = computed(() => (chat.typing[channelId.value] ?? []).map((id) => chat.userName(id)))
+const typingText = computed(() => {
+  const n = typingNames.value
+  if (!n.length) return ''
+  if (n.length === 1) return `${n[0]} is typing…`
+  if (n.length === 2) return `${n[0]} and ${n[1]} are typing…`
+  return 'Several people are typing…'
 })
 
 function sortMessages() {
@@ -90,7 +112,9 @@ async function scrollToBottom() {
 async function loadMessages(id: string) {
   loading.value = true
   messages.value = []
+  readAt.value = {}
   replyingTo.value = null
+  loadReads(id)
   let data: Message[]
   try {
     data = await api<Message[]>(`/channels/${id}/messages`, { query: { limit: PAGE_SIZE } })
@@ -137,6 +161,10 @@ async function jumpTo(messageId: string) {
 let stopEvents: (() => void) | null = null
 
 function onChannelEvent(e: ChannelEvent) {
+  if (e.type === 'read') {
+    if (e.channel_id === channelId.value && e.user_id !== chat.myId) readAt.value = { ...readAt.value, [e.user_id]: e.read_at }
+    return
+  }
   if (e.type === 'deleted') {
     messages.value = messages.value.filter((x) => x.id !== e.id)
     // replies keep their text but lose the quote, as on the server
@@ -169,13 +197,24 @@ function unsubscribe() {
 
 watch(
   channelId,
-  (id) => {
+  (id, previous) => {
+    if (previous) drafts.set(previous, draft.value, mentionMap.value) // keep what was typed in the chat we are leaving
+    const saved = drafts.get(id)
+    draft.value = saved.text
+    mentionMap.value = { ...saved.map }
+    files.value = []
+    editingId.value = null
     chat.setActive(id)
     loadMessages(id)
     subscribe()
   },
   { immediate: true },
 )
+watch([draft, mentionMap], () => drafts.set(channelId.value, draft.value, mentionMap.value), { deep: true })
+/** Typed (not restored from a draft): let the others know. */
+function typed() {
+  if (draft.value.trim()) chat.sendTyping(channelId.value)
+}
 // Searching from inside the channel you are already in only changes the query.
 watch(
   () => route.query.m,
@@ -264,7 +303,9 @@ function send() {
 
 async function deliver(id: string, tempId: string, body: string, picked: File[], text: string, map: Record<string, string>, replyTo: Message | null) {
   const fail = (title: string, e: unknown) => {
-    if (id === channelId.value) {
+    if (id !== channelId.value) {
+      if (!drafts.get(id).text) drafts.set(id, text, map) // moved to another chat: keep the text as that chat's draft
+    } else {
       messages.value = messages.value.filter((x) => x.id !== tempId)
       // Give the text and files back so the user can retry, unless they've started typing something else.
       if (!draft.value && !files.value.length) {
@@ -544,6 +585,15 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
               <UserAvatar v-if="!r.grouped" :name="chat.userName(r.m.user_id)" :status="chat.displayStatus(r.m.user_id)" ring="default" />
               <span v-else class="hidden pt-1 text-right text-[10px] leading-5 text-dimmed group-hover:block group-focus-within:block">{{ clock(r.m.created_at) }}</span>
             </div>
+            <span
+              v-if="r.m.user_id === chat.myId"
+              class="absolute bottom-0.5 right-2 inline-flex"
+              :class="isSeen(r.m) ? 'text-sky-500' : 'text-dimmed'"
+              :title="r.m.pending ? 'Sending' : isSeen(r.m) ? 'Read' : 'Delivered'"
+            >
+              <UIcon :name="r.m.pending ? 'i-lucide-clock' : isSeen(r.m) ? 'i-lucide-check-check' : 'i-lucide-check'" class="size-3.5" />
+              <span class="sr-only">{{ r.m.pending ? 'Sending' : isSeen(r.m) ? 'Read' : 'Delivered' }}</span>
+            </span>
             <div class="min-w-0 flex-1">
               <div v-if="!r.grouped" class="flex items-baseline gap-2">
                 <span class="font-semibold text-highlighted">{{ chat.userName(r.m.user_id) }}</span>
@@ -618,6 +668,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
         @dragleave.prevent="dragging = false"
         @drop.prevent="onDrop"
       >
+        <p class="h-5 px-1 text-xs italic text-muted" aria-live="polite">{{ typingText }}</p>
         <div class="rounded-xl border bg-muted/60 p-2 transition-colors focus-within:border-primary" :class="dragging ? 'border-primary bg-primary/10' : 'border-accented'">
         <div v-if="replyingTo" class="mb-2 flex items-stretch gap-2 overflow-hidden rounded-md bg-elevated/70 text-sm">
           <span class="w-1 shrink-0 bg-primary" />
@@ -669,7 +720,7 @@ const time = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'sho
             variant="none"
             class="flex-1"
             @keydown="onComposerKeydown"
-            @input="updatePicker"
+            @input="(e: Event) => { updatePicker(e); typed() }"
             @click="updatePicker"
             @keyup.left="updatePicker"
             @keyup.right="updatePicker"

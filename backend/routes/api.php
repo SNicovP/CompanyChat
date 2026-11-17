@@ -73,6 +73,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::patch('channels/{channel}/members/{user}', [MemberController::class, 'channelUpdate']);
     Route::delete('channels/{channel}/members/{user}', [MemberController::class, 'channelDestroy']);
     Route::post('channels/{channel}/read', [ChannelController::class, 'markRead']);
+    Route::get('channels/{channel}/reads', [ChannelController::class, 'reads']);
     Route::put('channels/{channel}/watch', [WatchController::class, 'store']);
     Route::delete('channels/{channel}/watch', [WatchController::class, 'destroy']);
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\ChannelKind;
+use App\Events\ChannelRead;
 use App\Events\DirectoryChanged;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ChannelResource;
@@ -153,9 +154,25 @@ class ChannelController extends Controller
     public function markRead(Request $request, Channel $channel): JsonResponse
     {
         abort_unless(Access::canAccessChannel($request->user(), $channel), 404);
-        Unread::markRead($request->user(), $channel->id);
+        $readAt = Unread::markRead($request->user(), $channel->id);
+        Realtime::send(new ChannelRead($channel->id, $request->user()->id, $readAt));
 
         return response()->json(['ok' => true]);
+    }
+
+    /** How far everyone else has read this conversation (for the second tick on your messages). */
+    public function reads(Request $request, Channel $channel): JsonResponse
+    {
+        abort_unless(Access::canAccessChannel($request->user(), $channel), 404);
+
+        return response()->json(DB::table('channel_reads')
+            ->where('channel_id', $channel->id)
+            ->where('user_id', '!=', $request->user()->id)
+            ->get(['user_id', 'last_read_at'])
+            ->map(fn ($r) => [
+                'user_id' => $r->user_id,
+                'read_at' => \Illuminate\Support\Carbon::parse($r->last_read_at, 'UTC')->utc()->format('Y-m-d\TH:i:s.u\Z'),
+            ])->values());
     }
 
     /** { unread: {channel_id: n}, mentions: {channel_id: n} } for channels with something unread. */
