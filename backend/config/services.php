@@ -35,6 +35,11 @@ return [
         'subject' => env('VAPID_SUBJECT'), // mailto:you@yourcompany.com
     ],
 
+    // Firebase Cloud Messaging for the Android app: path to the service-account JSON (Firebase console > Service accounts).
+    'fcm' => [
+        'credentials' => env('FCM_CREDENTIALS'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

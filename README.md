@@ -152,6 +152,34 @@ One-time setup:
 Troubleshooting: `backend/storage/logs/laravel.log` and the queue worker output. Browsers must allow notifications for
 the site, and on iPhone the app must be added to the Home Screen (iOS 16.4+).
 
+## Android app (Capacitor)
+
+`android/` is a Capacitor project that bundles the static build (`.output/public`) in an APK, so the UI ships with the
+app and updates need a new APK. Notifications with the app closed use Firebase Cloud Messaging (FCM); the browser's
+Web Push is not used there.
+
+One-time setup:
+
+1. **Firebase**: create a project at console.firebase.google.com, add an Android app with package name
+   `africa.ncloud.companychat`, and download `google-services.json` into `android/app/` (git-ignored).
+2. **Server key**: Firebase console > Project settings > Service accounts > Generate new private key. Put the JSON on the
+   server (outside the web root), set `FCM_CREDENTIALS=/path/to/service-account.json` in `backend/.env`, and run
+   `php artisan migrate` (adds `device_tokens`). Make sure `queue:work` runs. Without it, only Web Push is sent.
+3. **CORS**: the app runs from `https://localhost`, so add it to the API's `CORS_ALLOWED_ORIGINS`
+   (e.g. `https://your-site.com,https://localhost`).
+
+Build and run (needs Android Studio):
+
+```bash
+# the NUXT_PUBLIC_* values are baked in, so use the production API and Reverb values
+NUXT_PUBLIC_API_URL=https://api.example.com NUXT_PUBLIC_REVERB_KEY=... NUXT_PUBLIC_REVERB_HOST=api.example.com \
+NUXT_PUBLIC_REVERB_PORT=443 NUXT_PUBLIC_REVERB_SCHEME=https npm run android:sync
+npm run android:open     # opens Android Studio: Run on a phone, or Build > Generate Signed Bundle / APK
+```
+
+Debug build from the command line: `cd android && ./gradlew assembleDebug` (APK in `android/app/build/outputs/apk/debug`).
+Signing a release build needs your own keystore; keep it and its passwords out of git.
+
 ## Desktop app (Electron)
 
 `desktop/` is a thin Electron shell that loads the live site, so every deploy reaches the desktop app automatically (no separate release needed for web changes). It adds a Dock/taskbar badge with your unread count, keeps running when the window is closed (notifications keep arriving), opens external links in your browser, and shows a retry page when offline. Background Web Push is not used in the desktop app (the app itself stays running instead), so "Notify when the app is closed" is hidden there.
