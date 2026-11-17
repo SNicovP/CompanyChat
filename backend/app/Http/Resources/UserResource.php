@@ -9,6 +9,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /** @mixin User */
 class UserResource extends JsonResource
 {
+    private bool $withSettings = false;
+
+    /** Add the person's own preferences (GET/PATCH /me only: never the directory or realtime events). */
+    public function withSettings(): static
+    {
+        $this->withSettings = true;
+
+        return $this;
+    }
+
     public function toArray(Request $request): array
     {
         $viewer = $request->user();
@@ -22,6 +32,7 @@ class UserResource extends JsonResource
             'is_active' => $this->is_active,
             // Everyone can see the office directory; email addresses only to admins and yourself.
             'email' => $this->when($viewer && ($viewer->isAdmin() || $viewer->id === $this->id), $this->email),
+            'notification_tones' => $this->when($this->withSettings && $viewer?->id === $this->id, fn () => $this->notification_tones),
         ];
     }
 }

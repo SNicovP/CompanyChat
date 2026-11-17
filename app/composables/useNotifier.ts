@@ -5,8 +5,9 @@ interface Prefs {
   sound: boolean
   preview: boolean // show the message text in the notification
   dismissed: boolean // user said "not now" to the permission banner
-  tones: Record<ToneCategory, ToneId> // which sound each kind of message plays
-  volume: number // 0..1
+  tones: Record<ToneCategory, ToneId> // which sound each kind of message plays; also saved to the account
+  tonesOwner?: string | null // the user whose tones these are (a shared browser must not pass them on)
+  volume: number // 0..1, this device only
 }
 
 const STORAGE_KEY = 'companychat:notifications'

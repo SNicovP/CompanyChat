@@ -111,3 +111,25 @@ export function playTone(id: ToneId, volume = 1) {
     // blocked by the browser's autoplay rules: the visual notification still shows
   }
 }
+
+export const sameTones = (a: Record<ToneCategory, ToneId>, b: Record<ToneCategory, ToneId>) =>
+  a.dm === b.dm && a.mention === b.mention && a.channel === b.channel
+
+/**
+ * After sign-in: which tones this device should use, and whether its local choice should be saved to the account.
+ * - The account has tones: use them (they follow the person to every device).
+ * - It has none yet: keep a choice made on this device by this person (or before tones were saved to accounts) and
+ *   save it; never hand someone else's choice on a shared browser to the new person.
+ */
+export function reconcileTones(opts: {
+  account: unknown
+  local: Record<ToneCategory, ToneId>
+  /** whose choice the local copy is; undefined if it was made before tones were saved to accounts */
+  localOwner: string | null | undefined
+  me: string
+}): { tones: Record<ToneCategory, ToneId>; upload: boolean } {
+  if (opts.account) return { tones: resolveTones(opts.account), upload: false }
+  const mine = opts.localOwner === undefined || opts.localOwner === opts.me
+  if (mine && !sameTones(opts.local, DEFAULT_TONES)) return { tones: opts.local, upload: true }
+  return { tones: { ...DEFAULT_TONES }, upload: false }
+}

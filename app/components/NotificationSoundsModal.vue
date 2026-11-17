@@ -1,10 +1,18 @@
 <script setup lang="ts">
 // Pick a notification tone per kind of message (DMs, @mentions, channel messages), with a volume and a preview.
-// Stored per device, like the other notification preferences.
+// Tones are saved to the account (they follow you to other devices); the on/off switch and volume are per device.
 import { DEFAULT_TONES, TONE_CATEGORIES, TONE_OPTIONS, type ToneCategory, type ToneId } from '~/utils/tones'
 
 const open = defineModel<boolean>('open', { required: true })
 const notifier = useNotifier()
+const profile = useProfileStore()
+const toast = useToast()
+
+function saveToAccount(tones: Record<ToneCategory, ToneId> | null) {
+  profile.saveTones(tones).catch((e) =>
+    toast.add({ title: 'Could not save your tones to your account', description: `${errorMessage(e)} They still apply on this device.`, color: 'warning' }),
+  )
+}
 
 const volume = computed({
   get: () => Math.round(notifier.prefs.value.volume * 100),
@@ -14,16 +22,18 @@ const volume = computed({
 function choose(category: ToneCategory, tone: ToneId) {
   notifier.setTone(category, tone)
   notifier.preview(tone)
+  saveToAccount(notifier.prefs.value.tones)
 }
 
 function reset() {
   notifier.set('tones', { ...DEFAULT_TONES })
   notifier.set('volume', 0.8)
+  saveToAccount(null)
 }
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Notification sounds" description="Choose a tone for each kind of message. Saved on this device.">
+  <UModal v-model:open="open" title="Notification sounds" description="Choose a tone for each kind of message. Your tones are saved to your account; sound on/off and volume are for this device.">
     <template #body>
       <div class="space-y-5">
         <USwitch

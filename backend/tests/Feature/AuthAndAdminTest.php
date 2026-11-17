@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Events\ProfileUpdated;
 use App\Models\User;
 use App\Notifications\InviteNotification;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
@@ -114,5 +116,30 @@ class AuthAndAdminTest extends TestCase
         $this->assertCount(2, $others);
         $others->each(fn ($row) => $this->assertArrayNotHasKey('email', $row));
         $this->actingAs($admin)->getJson('/api/users')->assertJsonStructure([['email']]);
+    }
+
+    public function test_notification_tones_are_saved_per_user_and_kept_private(): void
+    {
+        Event::fake([ProfileUpdated::class]);
+        $user = User::factory()->create();
+        $this->actingAs($user)->getJson('/api/me')->assertOk()->assertJsonPath('notification_tones', null);
+
+        $tones = ['dm' => 'bell', 'mention' => 'alert', 'channel' => 'none'];
+        $this->actingAs($user)->patchJson('/api/me', ['notification_tones' => $tones])
+            ->assertOk()->assertJsonPath('notification_tones', $tones);
+        $this->assertSame($tones, $user->fresh()->notification_tones);
+        $this->actingAs($user)->getJson('/api/me')->assertJsonPath('notification_tones', $tones);
+        Event::assertNotDispatched(ProfileUpdated::class); // nobody else needs to hear about it
+
+        // Unknown kinds and odd values are refused; null resets to the app's defaults.
+        $this->actingAs($user)->patchJson('/api/me', ['notification_tones' => ['sms' => 'bell']])->assertStatus(422);
+        $this->actingAs($user)->patchJson('/api/me', ['notification_tones' => ['dm' => '<script>']])->assertStatus(422);
+        $this->actingAs($user)->patchJson('/api/me', ['notification_tones' => null])->assertOk()->assertJsonPath('notification_tones', null);
+
+        // Never shown to anyone else, admins included.
+        $user->forceFill(['notification_tones' => $tones])->save();
+        $admin = User::factory()->admin()->create();
+        $row = collect($this->actingAs($admin)->getJson('/api/users')->assertOk()->json())->firstWhere('id', $user->id);
+        $this->assertArrayNotHasKey('notification_tones', $row);
     }
 }
